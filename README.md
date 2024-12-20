@@ -5,11 +5,12 @@ A simple command line tool for chatting with various large language models in th
 ## Features
 
 - Supports any large language model service compatible with OpenAI API
+- Multiple model configuration support (can switch between different models)
 - Supports custom API endpoints
 - Supports streaming output (real-time display of answers)
 - Supports custom system prompt
 - Supports interactive conversation (with context)
-- Supports preset bot roles
+- Supports preset bot roles with single-character aliases
 - Supports interrupting generation (Ctrl+C)
 - Command line interface, easy to use
 - Colored output response
@@ -39,14 +40,19 @@ The program will automatically create a configuration file in the user's home di
 
 Configuration file example:
 ```toml
-# API key
+# Model configurations
+[models.openai]
 api_key = "your-api-key-here"
-
-# API base URL
 api_url = "https://api.openai.com/v1/chat/completions"
-
-# Default model
 model = "gpt-3.5-turbo"
+
+[models.deepseek]
+api_key = "your-deepseek-key"
+api_url = "https://api.deepseek.com/v1/chat/completions"
+model = "deepseek-chat"
+
+# Current active model
+current_model = "openai"
 
 # Whether to use streaming output
 stream = true
@@ -69,6 +75,11 @@ system_prompt = "You are a professional programmer, proficient in various progra
 [bots.teacher]
 name = "teacher"
 system_prompt = "You are a patient teacher, good at explaining complex concepts in simple ways."
+
+# Bot aliases (single character shortcuts)
+[aliases]
+p = "programmer"
+t = "teacher"
 ```
 
 ## Usage
@@ -93,6 +104,9 @@ gpt
 # Enter interactive mode using a specific bot
 gpt -b programmer
 
+# Enter interactive mode using a bot alias
+gpt -t p
+
 # Example conversation:
 > Hello
 Hello! How can I help you?
@@ -112,14 +126,35 @@ Goodbye!
 ### Single conversation
 ```bash
 # Direct question (without context)
-gpt "Hello"
+gpt Hello
 
 # Use a specific bot
-gpt -b programmer "Explain what closures are"
+gpt -b Explain what closures are
+
+# Use a bot alias
+gpt -t Explain what closures are
 
 # Complex question
-gpt "Explain what closures are"
+gpt Explain what closures are
 [Press Ctrl+C to cancel generation at any time]
+```
+
+### Model management
+```bash
+# Add new model
+gpt config model add openai sk-xxxxxxxxxxxxxxxx
+
+# Add model with custom URL and model name
+gpt config model add deepseek your-api-key --url https://api.deepseek.com/v1/chat/completions --model deepseek-chat
+
+# Remove model
+gpt config model remove openai
+
+# List all models
+gpt config model list
+
+# Switch to a different model
+gpt config model use deepseek
 ```
 
 ### Configuration management
@@ -129,15 +164,6 @@ gpt config
 
 # Display current configuration
 gpt config show
-
-# Set API key
-gpt config key sk-xxxxxxxxxxxxxxxx
-
-# Set API URL (use other compatible services)
-gpt config url https://api.example.com/v1/chat/completions
-
-# Set default model
-gpt config model gpt-4
 
 # Set system prompt
 gpt config system "You are a professional programmer"
@@ -161,7 +187,7 @@ gpt bots add coder -s "You are a senior code review expert, good at code optimiz
 gpt bots remove coder
 
 # Use bot (single conversation)
-gpt -b programmer "Explain design patterns"
+gpt -b programmer Explain design patterns
 
 # Use bot (interactive mode)
 gpt -b programmer
@@ -173,16 +199,10 @@ gpt bots alias remove p                  # remove alias 'p'
 gpt bots alias list                      # list all aliases
 
 # Use bot with alias (single conversation)
-gpt -t p "Explain design patterns"
+gpt -p Explain design patterns
 
 # Use bot with alias (interactive mode)
-gpt -t p
-```
-
-### Alias management
-```bash
-# List all aliases
-gpt config alias list
+gpt -p
 ```
 
 ## Supported services
@@ -191,12 +211,12 @@ This tool supports all compatible services with the OpenAI API, including but no
 
 1. OpenAI
    ```bash
-   gpt config url https://api.openai.com/v1/chat/completions
+   gpt config model add openai sk-xxxxxxxxxxxxxxxx
    ```
 
 2. DeepSeek
    ```bash
-   gpt config url https://api.deepseek.com/v1/chat/completions
+   gpt config model add deepseek your-api-key --url https://api.deepseek.com/v1/chat/completions --model deepseek-chat
    ```
 
 3. Other compatible services
@@ -217,6 +237,8 @@ This tool supports all compatible services with the OpenAI API, including but no
 - Preset bots help you quickly switch between different conversation roles and scenarios
 - Bots can be used in single conversations and interactive mode
 - You can press Ctrl+C to cancel generation at any time during the generation process
+- Bot aliases provide quick access to frequently used bots with single-character shortcuts
+- Multiple model configurations allow you to easily switch between different LLM providers
 
 # Build
 
