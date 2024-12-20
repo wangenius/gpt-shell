@@ -38,19 +38,40 @@ fn build_cli() -> Command {
         Command::new("config")
             .about("config management")
             .subcommand(
-                Command::new("key")
-                    .about("set api key")
-                    .arg(Arg::new("key").required(true))
-            )
-            .subcommand(
-                Command::new("url")
-                    .about("set api url")
-                    .arg(Arg::new("url").required(true))
-            )
-            .subcommand(
                 Command::new("model")
-                    .about("set model")
-                    .arg(Arg::new("model").required(true))
+                    .about("model management")
+                    .subcommand(
+                        Command::new("add")
+                            .about("add new model")
+                            .arg(Arg::new("name").required(true))
+                            .arg(Arg::new("key").required(true))
+                            .arg(
+                                Arg::new("url")
+                                    .short('u')
+                                    .long("url")
+                                    .default_value("https://api.openai.com/v1/chat/completions")
+                            )
+                            .arg(
+                                Arg::new("model")
+                                    .short('m')
+                                    .long("model")
+                                    .default_value("gpt-3.5-turbo")
+                            )
+                    )
+                    .subcommand(
+                        Command::new("remove")
+                            .about("remove model")
+                            .arg(Arg::new("name").required(true))
+                    )
+                    .subcommand(
+                        Command::new("list")
+                            .about("list all models")
+                    )
+                    .subcommand(
+                        Command::new("use")
+                            .about("set current model")
+                            .arg(Arg::new("name").required(true))
+                    )
             )
             .subcommand(
                 Command::new("system")
@@ -116,9 +137,21 @@ fn build_cli() -> Command {
 }
 
 async fn chat_once(config: &Config, messages: Vec<Message>, running: Arc<AtomicBool>) -> Result<String> {
-    let provider = OpenAIProvider::new(config.api_key.clone())
-        .with_url(config.api_url.clone())
-        .with_model(config.model.clone());
+    let (_, model_config) = match config.get_current_model() {
+        Some(model) => model,
+        None => {
+            println!("tips: no model configured, please add a model first.");
+            println!("you can use the following command to add a model:");
+            println!("  gpt config model add <name> <key> [--url <url>] [--model <model>]");
+            println!("for example, add deepseek:");
+            println!("  gpt config model add deepseek your-api-key --url https://api.deepseek.com/v1/chat/completions --model deepseek-chat");
+            return Ok(String::new());
+        }
+    };
+
+    let provider = OpenAIProvider::new(model_config.api_key.clone())
+        .with_url(model_config.api_url.clone())
+        .with_model(model_config.model.clone());
 
     let mut stream = provider.chat(messages, config.stream, running.clone()).await?;
     let mut response = String::new();
@@ -149,6 +182,16 @@ async fn chat_once(config: &Config, messages: Vec<Message>, running: Arc<AtomicB
 }
 
 async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config: BotsConfig, running: Arc<AtomicBool>) -> Result<()> {
+    // 首先检查是否配置了模型
+    if config.get_current_model().is_none() {
+        println!("tips: no model configured, please add a model first.");
+        println!("you can use the following command to add a model:");
+        println!("  gpt config model add <name> <key> [--url <url>] [--model <model>]");
+        println!("for example, add deepseek:");
+        println!("  gpt config model add deepseek your-api-key --url https://api.deepseek.com/v1/chat/completions --model deepseek-chat");
+        return Ok(());
+    }
+
     let mut messages = Vec::new();
     // if specified bot, use bot's system prompt
     if let Some(bot_name) = bot_name {
@@ -159,7 +202,10 @@ async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config:
             });
             println!("using bot: {}", bot_name.green());
         } else {
-            return Err(anyhow::anyhow!("bot not found: {}", bot_name));
+            println!("tips: bot not found: {}", bot_name);
+            println!("you can use the following command to list all bots:");
+            println!("  gpt bots list");
+            return Ok(());
         }
     } else if let Some(ref system_prompt) = config.system_prompt {
         // otherwise use default system prompt
@@ -286,19 +332,43 @@ async fn main() -> Result<()> {
     match matches.subcommand() {
         Some(("config", sub_matches)) => {
             match sub_matches.subcommand() {
-                Some(("key", key_matches)) => {
-                    if let Some(key) = key_matches.get_one::<String>("key") {
-                        config.set_key(key.clone())?;
-                    }
-                }
-                Some(("url", url_matches)) => {
-                    if let Some(url) = url_matches.get_one::<String>("url") {
-                        config.set_url(url.clone())?;
-                    }
-                }
                 Some(("model", model_matches)) => {
-                    if let Some(model) = model_matches.get_one::<String>("model") {
-                        config.set_model(model.clone())?;
+                    match model_matches.subcommand() {
+                        Some(("add", add_matches)) => {
+                            if let (Some(name), Some(key), Some(url), Some(model)) = (
+                                add_matches.get_one::<String>("name"),
+                                add_matches.get_one::<String>("key"),
+                                add_matches.get_one::<String>("url"),
+                                add_matches.get_one::<String>("model")
+                            ) {
+                                config.add_model(
+                                    name.clone(),
+                                    key.clone(),
+                                    url.clone(),
+                                    model.clone()
+                                )?;
+                            }
+                        }
+                        Some(("remove", remove_matches)) => {
+                            if let Some(name) = remove_matches.get_one::<String>("name") {
+                                config.remove_model(name)?;
+                            }
+                        }
+                        Some(("list", _)) => {
+                            config.list_models();
+                        }
+                        Some(("use", use_matches)) => {
+                            if let Some(name) = use_matches.get_one::<String>("name") {
+                                config.set_current_model(name)?;
+                            }
+                        }
+                        _ => {
+                            println!("available model commands:");
+                            println!("  gpt config model add <name> <key> [--url <url>] [--model <model>]");
+                            println!("  gpt config model remove <name>");
+                            println!("  gpt config model list");
+                            println!("  gpt config model use <name>");
+                        }
                     }
                 }
                 Some(("system", system_matches)) => {
@@ -312,17 +382,22 @@ async fn main() -> Result<()> {
                 }
                 Some(("show", _)) => {
                     println!("current config:");
-                    println!("API key: {}", if config.api_key.is_empty() { 
-                        "not set".red() 
-                    } else { 
-                        "set".green() 
-                    });
-                    println!("API URL: {}", config.api_url.green());
-                    println!("default model: {}", config.model.green());
-                    println!("stream output: {}", if config.stream { 
-                        "enabled".green() 
-                    } else { 
-                        "disabled".yellow() 
+                    if let Some((name, model_config)) = config.get_current_model() {
+                        println!("current model: {}", name.green());
+                        println!("  API URL: {}", model_config.api_url.green());
+                        println!("  Model: {}", model_config.model.green());
+                        println!("  API Key: {}", if model_config.api_key.is_empty() {
+                            "not set".red()
+                        } else {
+                            "set".green()
+                        });
+                    } else {
+                        println!("no model configured");
+                    }
+                    println!("stream output: {}", if config.stream {
+                        "enabled".green()
+                    } else {
+                        "disabled".yellow()
                     });
                     println!("system prompt: {}", config.system_prompt.as_ref().map(|p| p.as_str()).unwrap_or("not set").green());
                 }

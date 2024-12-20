@@ -1,7 +1,7 @@
 #[cfg(windows)]
 fn main() {
     let mut res = winres::WindowsResource::new();
-    res.set("FileDescription", "GPT Shell - 命令行AI助手")
+    res.set("FileDescription", "GPT Shell - command line AI assistant")
         .set("ProductName", "GPT Shell")
         .set("OriginalFilename", "gpt.exe")
         .set("LegalCopyright", "Copyright © 2024")
