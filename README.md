@@ -1,32 +1,36 @@
 # GPT Shell
 
-A simple command line tool for chatting with various large language models in the terminal.
+A versatile command-line tool for interacting with various Large Language Models through the terminal.
 
-## Features
+## Key Features
 
-- Supports any large language model service compatible with OpenAI API
-- Multiple model configuration support (can switch between different models)
-- Supports custom API endpoints
-- Supports streaming output (real-time display of answers)
-- Supports custom system prompt
-- Supports interactive conversation (with context)
-- Supports preset bot roles with single-character aliases
-- Supports interrupting generation (Ctrl+C)
-- Command line interface, easy to use
-- Colored output response
-- Supports configuration file and environment variable configuration
-
-- Supports Qwen \ DeepSeek \ Spark \ OpenAI \ ZhiPu
+- Supports any LLM service compatible with OpenAI API
+- Multiple model configuration support (easily switch between different providers)
+- Custom API endpoints support
+- Streaming output (real-time response display)
+- Custom system prompts
+- Interactive conversations with context
+- Preset bot roles with single-character aliases
+- Generation interruption (Ctrl+C)
+- Simple command-line interface
+- Colored output
+- Configuration via files and environment variables
+- Built-in support for popular providers:
+  - OpenAI
+  - DeepSeek
+  - Azure OpenAI
+  - Claude API
+  - Local LLMs (via compatible servers like LMStudio)
 
 ## Installation
 
-Ensure your system has Rust development environment installed, then execute:
+Ensure you have Rust installed, then:
 
 ```bash
-# build
+# Build
 cargo build --release
 
-# install (copy the generated binary file to the system path)
+# Install (copy binary to system path)
 # Windows (PowerShell):
 Copy-Item "target/release/gpt.exe" "$env:USERPROFILE/bin/gpt.exe"
 # Linux/macOS:
@@ -35,12 +39,12 @@ cp target/release/gpt ~/.local/bin/
 
 ## Configuration
 
-### Configuration file
-The program will automatically create a configuration file in the user's home directory:
+### Config File
+The program automatically creates a configuration file in your home directory:
 - Windows: `%USERPROFILE%\.gpt-shell\config.toml`
-- Linux/macOS: `~/.gpt-shell\config.toml`
+- Linux/macOS: `~/.gpt-shell/config.toml`
 
-Configuration file example:
+Example configuration:
 ```toml
 # Model configurations
 [models.openai]
@@ -60,15 +64,15 @@ current_model = "openai"
 stream = true
 
 # System prompt (optional)
-system_prompt = "You are a useful AI assistant."
+system_prompt = "You are a helpful AI assistant."
 ```
 
-### Bot configuration
-The program will automatically create a bot configuration file:
+### Bot Configuration
+Bot configurations are stored in:
 - Windows: `%USERPROFILE%\.gpt-shell\bots.toml`
-- Linux/macOS: `~/.gpt-shell\bots.toml`
+- Linux/macOS: `~/.gpt-shell/bots.toml`
 
-Bot configuration example:
+Example bot configuration:
 ```toml
 [bots.programmer]
 name = "programmer"
@@ -86,62 +90,55 @@ t = "teacher"
 
 ## Usage
 
-### View help
+### Help Commands
 ```bash
-# Display help information
+# Show main help
 gpt --help
 
-# Display configuration command help
+# Show config command help
 gpt config --help
 
-# Display bot command help
+# Show bots command help
 gpt bots --help
 ```
 
-### Interactive conversation
+### Interactive Mode
 ```bash
-# Enter interactive mode (supports context-based conversation)
+# Enter interactive mode
 gpt
 
-# Enter interactive mode using a specific bot
+# Use a specific bot
 gpt -b programmer
 
-# Enter interactive mode using a bot alias
-gpt -t p
+# Use a bot alias
+gpt -p
 
-# Example conversation:
+Example conversation:
 > Hello
 Hello! How can I help you?
 
-> What is 1+1?
-1+1 equals 2.
-
-> Why?
-Because in basic mathematics, 1+1 represents adding two units of 1...
-[Press Ctrl+C to cancel generation at any time]
+> What is a closure?
+A closure is a function that captures its environment...
+[Press Ctrl+C to cancel generation]
 Generation cancelled.
 
 > exit
 Goodbye!
 ```
 
-### Single conversation
+### Single Queries
 ```bash
-# Direct question (without context)
-gpt Hello
+# Direct question (no context)
+gpt "Hello"
 
 # Use a specific bot
-gpt -b Explain what closures are
+gpt -b programmer "Explain closures"
 
 # Use a bot alias
-gpt -t Explain what closures are
-
-# Complex question
-gpt Explain what closures are
-[Press Ctrl+C to cancel generation at any time]
+gpt -p "Explain closures"
 ```
 
-### Model management
+### Model Management
 ```bash
 # Add new model
 gpt config model add openai sk-xxxxxxxxxxxxxxxx
@@ -152,20 +149,20 @@ gpt config model add deepseek your-api-key --url https://api.deepseek.com/v1/cha
 # Remove model
 gpt config model remove openai
 
-# List all models
+# List models
 gpt config model list
 
-# Switch to a different model
+# Switch model
 gpt config model use deepseek
 ```
 
-### Configuration management
+### Configuration Management
 ```bash
-# Open configuration file
+# Show current config
 gpt config
 
-# Display current configuration
-gpt config show
+# Edit config file
+gpt config edit
 
 # Set system prompt
 gpt config system "You are a professional programmer"
@@ -177,71 +174,42 @@ gpt config system
 gpt config stream true
 ```
 
-### Bot management
+### Bot Management
 ```bash
 # List all bots
-gpt bots list
+gpt bots
+
+# Edit bots config
+gpt bots edit
 
 # Add new bot
-gpt bots add coder -s "You are a senior code review expert, good at code optimization and best practice suggestions."
+gpt bots add coder -s "You are a senior code review expert."
 
-# Delete bot
+# Remove bot
 gpt bots remove coder
 
-# Use bot (single conversation)
-gpt -b programmer Explain design patterns
-
-# Use bot (interactive mode)
-gpt -b programmer
-
 # Manage aliases
-gpt bots alias                           # show alias help
-gpt bots alias set programmer p          # set alias 'p' for bot 'programmer'
-gpt bots alias remove p                  # remove alias 'p'
-gpt bots alias list                      # list all aliases
-
-# Use bot with alias (single conversation)
-gpt -p Explain design patterns
-
-# Use bot with alias (interactive mode)
-gpt -p
+gpt bots alias set programmer p    # Set alias
+gpt bots alias remove p            # Remove alias
+gpt bots alias list                # List aliases
 ```
 
-## Supported services
+## Important Notes
 
-This tool supports all compatible services with the OpenAI API, including but not limited to:
+- Ensure you have valid API keys for the services you want to use
+- API calls may incur costs - check provider pricing
+- Keep your API keys secure - never commit them to version control
+- Different models may have different pricing and limitations
+- Configuration changes take effect immediately
+- Config files and API keys are stored in your home directory
+- Conversation history in interactive mode is cleared when the program closes
+- Bot aliases provide quick access with single-character shortcuts
+- You can cancel generation at any time with Ctrl+C
 
-1. OpenAI
-   ```bash
-   gpt config model add openai sk-xxxxxxxxxxxxxxxx
-   ```
+## Building
 
-2. DeepSeek
-   ```bash
-   gpt config model add deepseek your-api-key --url https://api.deepseek.com/v1/chat/completions --model deepseek-chat
-   ```
+Use `cargo build --release` to build an optimized binary.
 
-3. Other compatible services
-   - Azure OpenAI
-   - Claude API
-   - Local deployment of open source models (such as using LMStudio)
+## Contributing
 
-## Notes
-
-- Ensure you have a valid API key for the corresponding service
-- API calls may incur costs, please refer to the pricing strategies of the service providers
-- Please keep your API key secure and do not submit it to version control systems
-- Different models may have different pricing and feature limitations
-- The APIs of different service providers may have different usage limits and response characteristics
-- Configuration file changes take effect immediately without restarting the program
-- Configuration files and API keys are stored in the user's home directory for easy management
-- Conversation history in interactive mode is retained in memory and cleared when the program is closed
-- Preset bots help you quickly switch between different conversation roles and scenarios
-- Bots can be used in single conversations and interactive mode
-- You can press Ctrl+C to cancel generation at any time during the generation process
-- Bot aliases provide quick access to frequently used bots with single-character shortcuts
-- Multiple model configurations allow you to easily switch between different LLM providers
-
-# Build
-
-Use `cargo build --release` to build.
+Contributions are welcome! Please feel free to submit a Pull Request.

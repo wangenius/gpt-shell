@@ -60,13 +60,48 @@ impl BotsConfig {
     pub fn open_config() -> Result<()> {
         if let Some(path) = Self::get_path() {
             if cfg!(windows) {
-                Command::new("notepad")
-                    .arg(path)
-                    .spawn()?;
+                // 首先尝试使用 VSCode
+                if Command::new("code")
+                    .arg(path.clone())
+                    .spawn()
+                    .is_err() {
+                    // 如果 VSCode 不可用，尝试使用 Notepad++
+                    if Command::new("notepad++")
+                        .arg(path.clone())
+                        .spawn()
+                        .is_err() {
+                        // 最后使用系统默认的记事本
+                        Command::new("notepad")
+                            .arg(path)
+                            .spawn()?;
+                    }
+                }
             } else {
-                Command::new("xdg-open")
-                    .arg(path)
-                    .spawn()?;
+                // 在类Unix系统上，首先尝试使用环境变量中的默认编辑器
+                if let Ok(editor) = env::var("EDITOR") {
+                    Command::new(editor)
+                        .arg(path.clone())
+                        .spawn()?;
+                } else {
+                    // 如果没有设置 EDITOR，尝试常见的编辑器
+                    let editors = ["code", "vim", "nano", "gedit"];
+                    let mut opened = false;
+                    for editor in editors {
+                        if Command::new(editor)
+                            .arg(path.clone())
+                            .spawn()
+                            .is_ok() {
+                            opened = true;
+                            break;
+                        }
+                    }
+                    // 如果都失败了，使用 xdg-open
+                    if !opened {
+                        Command::new("xdg-open")
+                            .arg(path)
+                            .spawn()?;
+                    }
+                }
             }
         }
         Ok(())

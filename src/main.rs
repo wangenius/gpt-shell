@@ -36,7 +36,7 @@ fn build_cli() -> Command {
     // 添加子命令
     cmd = cmd.subcommand(
         Command::new("config")
-            .about("config management")
+            .about("configuration management")
             .subcommand(
                 Command::new("model")
                     .about("model management")
@@ -47,15 +47,13 @@ fn build_cli() -> Command {
                             .arg(Arg::new("key").required(true))
                             .arg(
                                 Arg::new("url")
-                                    .short('u')
                                     .long("url")
-                                    .default_value("https://api.openai.com/v1/chat/completions")
+                                    .help("API URL")
                             )
                             .arg(
                                 Arg::new("model")
-                                    .short('m')
                                     .long("model")
-                                    .default_value("gpt-3.5-turbo")
+                                    .help("model name")
                             )
                     )
                     .subcommand(
@@ -69,14 +67,14 @@ fn build_cli() -> Command {
                     )
                     .subcommand(
                         Command::new("use")
-                            .about("set current model")
+                            .about("switch to model")
                             .arg(Arg::new("name").required(true))
                     )
             )
             .subcommand(
                 Command::new("system")
                     .about("set system prompt")
-                    .arg(Arg::new("prompt").required(false))
+                    .arg(Arg::new("prompt"))
             )
             .subcommand(
                 Command::new("stream")
@@ -85,7 +83,11 @@ fn build_cli() -> Command {
             )
             .subcommand(
                 Command::new("show")
-                    .about("show current config")
+                    .about("show current configuration")
+            )
+            .subcommand(
+                Command::new("edit")
+                    .about("edit configuration file")
             )
     );
 
@@ -111,6 +113,10 @@ fn build_cli() -> Command {
             .subcommand(
                 Command::new("list")
                     .about("list all bots")
+            )
+            .subcommand(
+                Command::new("edit")
+                    .about("edit bots configuration file")
             )
             .subcommand(
                 Command::new("alias")
@@ -365,9 +371,9 @@ async fn main() -> Result<()> {
                         _ => {
                             println!("available model commands:");
                             println!("  gpt config model add <n> <key> [--url <url>] [--model <model>]");
-                            println!("  gpt config model remove <name>");
+                            println!("  gpt config model remove <n>");
                             println!("  gpt config model list");
-                            println!("  gpt config model use <name>");
+                            println!("  gpt config model use <n>");
                         }
                     }
                 }
@@ -383,26 +389,34 @@ async fn main() -> Result<()> {
                 Some(("show", _)) => {
                     println!("current config:");
                     if let Some((name, model_config)) = config.get_current_model() {
-                        println!("current model: {}", name.green());
-                        println!("  API URL: {}", model_config.api_url.green());
-                        println!("  Model: {}", model_config.model.green());
-                        println!("  API Key: {}", if model_config.api_key.is_empty() {
-                            "not set".red()
-                        } else {
-                            "set".green()
-                        });
+                        println!("  current model: {}", name.green());
+                        println!("  api url: {}", model_config.api_url);
+                        println!("  model: {}", model_config.model);
+                        println!("  stream: {}", config.stream);
+                        if let Some(ref system_prompt) = config.system_prompt {
+                            println!("  system prompt: {}", system_prompt);
+                        }
                     } else {
-                        println!("no model configured");
+                        println!("  no model configured");
                     }
-                    println!("stream output: {}", if config.stream {
-                        "enabled".green()
-                    } else {
-                        "disabled".yellow()
-                    });
-                    println!("system prompt: {}", config.system_prompt.as_ref().map(|p| p.as_str()).unwrap_or("not set").green());
+                }
+                Some(("edit", _)) => {
+                    Config::open_config()?;
                 }
                 _ => {
-                    Config::open_config()?;
+                    // 默认显示当前配置
+                    println!("current config:");
+                    if let Some((name, model_config)) = config.get_current_model() {
+                        println!("  current model: {}", name.green());
+                        println!("  api url: {}", model_config.api_url);
+                        println!("  model: {}", model_config.model);
+                        println!("  stream: {}", config.stream);
+                        if let Some(ref system_prompt) = config.system_prompt {
+                            println!("  system prompt: {}", system_prompt);
+                        }
+                    } else {
+                        println!("  no model configured");
+                    }
                 }
             }
         }
@@ -423,6 +437,9 @@ async fn main() -> Result<()> {
                 }
                 Some(("list", _)) => {
                     bots_config.list_bots();
+                }
+                Some(("edit", _)) => {
+                    BotsConfig::open_config()?;
                 }
                 Some(("alias", alias_matches)) => {
                     match alias_matches.subcommand() {
@@ -451,7 +468,8 @@ async fn main() -> Result<()> {
                     }
                 }
                 _ => {
-                    BotsConfig::open_config()?;
+                    // 默认显示机器人列表
+                    bots_config.list_bots();
                 }
             }
         }
