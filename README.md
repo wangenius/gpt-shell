@@ -16,6 +16,8 @@ A simple command line tool for chatting with various large language models in th
 - Colored output response
 - Supports configuration file and environment variable configuration
 
+- Supports Qwen \ DeepSeek \ Spark \ OpenAI \ ZhiPu
+
 ## Installation
 
 Ensure your system has Rust development environment installed, then execute:

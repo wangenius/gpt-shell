@@ -8,7 +8,7 @@ use dotenv::dotenv;
 use anyhow::Result;
 use futures::StreamExt;
 use std::io::{self, Write, BufRead};
-use llm_provider::{LLMProvider, Message, OpenAIProvider};
+use llm_provider::{LLMProvider, Message, Provider};
 use config::Config;
 use bots::BotsConfig;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -142,14 +142,14 @@ async fn chat_once(config: &Config, messages: Vec<Message>, running: Arc<AtomicB
         None => {
             println!("tips: no model configured, please add a model first.");
             println!("you can use the following command to add a model:");
-            println!("  gpt config model add <name> <key> [--url <url>] [--model <model>]");
+            println!("  gpt config model add <n> <key> [--url <url>] [--model <model>]");
             println!("for example, add deepseek:");
             println!("  gpt config model add deepseek your-api-key --url https://api.deepseek.com/v1/chat/completions --model deepseek-chat");
             return Ok(String::new());
         }
     };
 
-    let provider = OpenAIProvider::new(model_config.api_key.clone())
+    let provider = Provider::new(model_config.api_key.clone())
         .with_url(model_config.api_url.clone())
         .with_model(model_config.model.clone());
 
@@ -186,7 +186,7 @@ async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config:
     if config.get_current_model().is_none() {
         println!("tips: no model configured, please add a model first.");
         println!("you can use the following command to add a model:");
-        println!("  gpt config model add <name> <key> [--url <url>] [--model <model>]");
+        println!("  gpt config model add <n> <key> [--url <url>] [--model <model>]");
         println!("for example, add deepseek:");
         println!("  gpt config model add deepseek your-api-key --url https://api.deepseek.com/v1/chat/completions --model deepseek-chat");
         return Ok(());
@@ -364,7 +364,7 @@ async fn main() -> Result<()> {
                         }
                         _ => {
                             println!("available model commands:");
-                            println!("  gpt config model add <name> <key> [--url <url>] [--model <model>]");
+                            println!("  gpt config model add <n> <key> [--url <url>] [--model <model>]");
                             println!("  gpt config model remove <name>");
                             println!("  gpt config model list");
                             println!("  gpt config model use <name>");
