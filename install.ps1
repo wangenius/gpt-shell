@@ -7,7 +7,7 @@ $userProfile = $env:USERPROFILE
 # 创建目标目录
 $binPath = Join-Path $userProfile "bin"
 if (-not (Test-Path $binPath)) {
-    Write-Host "创建目录: $binPath" -ForegroundColor Yellow
+    Write-Host "creating directory: $binPath" -ForegroundColor Yellow
     New-Item -ItemType Directory -Path $binPath | Out-Null
 }
 
@@ -16,17 +16,17 @@ $exePath = Join-Path $PSScriptRoot "target\release\gpt.exe"
 $targetPath = Join-Path $binPath "gpt.exe"
 
 if (-not (Test-Path $exePath)) {
-    Write-Host "错误: 未找到可执行文件，请先运行 'cargo build --release'" -ForegroundColor Red
+    Write-Host "error: executable file not found, please run 'cargo build --release'" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "复制 gpt.exe 到 $targetPath" -ForegroundColor Yellow
+Write-Host "copying gpt.exe to $targetPath" -ForegroundColor Yellow
 Copy-Item $exePath $targetPath -Force
 
 # 检查用户 PATH 环境变量中是否已包含 bin 目录
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -notlike "*$binPath*") {
-    Write-Host "添加 $binPath 到用户 PATH 环境变量" -ForegroundColor Yellow
+    Write-Host "adding $binPath to user PATH environment variable" -ForegroundColor Yellow
     
     if ($userPath) {
         $newPath = "$userPath;$binPath"
@@ -38,20 +38,20 @@ if ($userPath -notlike "*$binPath*") {
     $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + $newPath
 }
 
-Write-Host "`n安装完成！" -ForegroundColor Green
-Write-Host "你现在可以在任何目录使用 'gpt' 命令了。" -ForegroundColor Green
-Write-Host "注意：你可能需要重新打开终端才能使用 gpt 命令。" -ForegroundColor Yellow
+Write-Host "`ninstallation complete!" -ForegroundColor Green
+Write-Host "you can now use 'gpt' command in any directory." -ForegroundColor Green
+Write-Host "note: you may need to reopen the terminal to use the gpt command." -ForegroundColor Yellow
 
 # 检查是否已经构建了发布版本
 if ((Get-Item $exePath).Length -lt 1MB) {
-    Write-Host "`n警告: 可执行文件似乎太小，可能未优化。建议重新运行:" -ForegroundColor Yellow
+    Write-Host "`nwarning: executable file seems too small, may not be optimized. please run:" -ForegroundColor Yellow
     Write-Host "cargo build --release" -ForegroundColor Cyan
 }
 
 # 显示版本信息
-Write-Host "`n当前版本:" -ForegroundColor Cyan
+Write-Host "`ncurrent version:" -ForegroundColor Cyan
 try {
     & $targetPath --version
 } catch {
-    Write-Host "无法获取版本信息" -ForegroundColor Red
-} 
+    Write-Host "failed to get version information" -ForegroundColor Red
+}

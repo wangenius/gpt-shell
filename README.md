@@ -1,175 +1,193 @@
 # GPT Shell
 
-一个简单的命令行工具，用于在终端中与各种大语言模型进行对话。
+A simple command line tool for chatting with various large language models in the terminal.
 
-## 功能特点
+## Features
 
-- 支持任意兼容OpenAI API的大语言模型服务
-- 支持自定义API端点
-- 支持流式输出（实时显示回答）
-- 支持自定义系统提示词
-- 支持交互式对话（带上下文）
-- 支持预设机器人角色
-- 支持生成过程中断（Ctrl+C）
-- 命令行界面，使用简单
-- 彩色输出响应
-- 支持配置文件和环境变量配置
+- Supports any large language model service compatible with OpenAI API
+- Supports custom API endpoints
+- Supports streaming output (real-time display of answers)
+- Supports custom system prompt
+- Supports interactive conversation (with context)
+- Supports preset bot roles
+- Supports interrupting generation (Ctrl+C)
+- Command line interface, easy to use
+- Colored output response
+- Supports configuration file and environment variable configuration
 
-## 安装
+## Installation
 
-确保你的系统已安装Rust开发环境，然后执行：
+Ensure your system has Rust development environment installed, then execute:
 
 ```bash
-# 构建
+# build
 cargo build --release
 
-# 安装（将生成的二进制文件复制到系统路径）
+# install (copy the generated binary file to the system path)
 # Windows (PowerShell):
 Copy-Item "target/release/gpt.exe" "$env:USERPROFILE/bin/gpt.exe"
 # Linux/macOS:
 cp target/release/gpt ~/.local/bin/
 ```
 
-## 配置
+## Configuration
 
-### 配置文件
-程序会在首次运行时自动在用户主目录创建配置文件：
+### Configuration file
+The program will automatically create a configuration file in the user's home directory:
 - Windows: `%USERPROFILE%\.gpt-shell\config.toml`
 - Linux/macOS: `~/.gpt-shell\config.toml`
 
-配置文件示例：
+Configuration file example:
 ```toml
-# API密钥
+# API key
 api_key = "your-api-key-here"
 
-# API基础URL
+# API base URL
 api_url = "https://api.openai.com/v1/chat/completions"
 
-# 默认使用的模型
+# Default model
 model = "gpt-3.5-turbo"
 
-# 是否使用流式输出
+# Whether to use streaming output
 stream = true
 
-# 系统提示词（可选）
-system_prompt = "你是一个有用的AI助手。"
+# System prompt (optional)
+system_prompt = "You are a useful AI assistant."
 ```
 
-### 机器人配置
-程序会自动创建机器人配置文件：
+### Bot configuration
+The program will automatically create a bot configuration file:
 - Windows: `%USERPROFILE%\.gpt-shell\bots.toml`
 - Linux/macOS: `~/.gpt-shell\bots.toml`
 
-机器人配置示例：
+Bot configuration example:
 ```toml
 [bots.programmer]
 name = "programmer"
-system_prompt = "你是一个专业的程序员，精通各种编程语言和软件开发最佳实践。"
+system_prompt = "You are a professional programmer, proficient in various programming languages and software development best practices."
 
 [bots.teacher]
 name = "teacher"
-system_prompt = "你是一个耐心的��师，善于用简单的方式解释复杂的概念。"
+system_prompt = "You are a patient teacher, good at explaining complex concepts in simple ways."
 ```
 
-## 使用方法
+## Usage
 
-### 查看帮助
+### View help
 ```bash
-# 显示帮助信息
+# Display help information
 gpt --help
 
-# 显示配置命令帮助
+# Display configuration command help
 gpt config --help
 
-# 显示机器人命令帮助
+# Display bot command help
 gpt bots --help
 ```
 
-### 交互式对话
+### Interactive conversation
 ```bash
-# 进入交互模式（支持上下文的对话）
+# Enter interactive mode (supports context-based conversation)
 gpt
 
-# 使用特定机器人进入交互模式
+# Enter interactive mode using a specific bot
 gpt -b programmer
 
-# 示例对话：
-> 你好
-你好！有什么我可以帮你的吗？
+# Example conversation:
+> Hello
+Hello! How can I help you?
 
-> 1+1等于几？
-1+1等于2。
+> What is 1+1?
+1+1 equals 2.
 
-> 为什么？
-因为在基础数学中，1+1表示将两个单位数1相加...
-[按 Ctrl+C 取消生成]
-已取消生成。
+> Why?
+Because in basic mathematics, 1+1 represents adding two units of 1...
+[Press Ctrl+C to cancel generation at any time]
+Generation cancelled.
 
 > exit
-再见！
+Goodbye!
 ```
 
-### 单次对话
+### Single conversation
 ```bash
-# 直接提问（不保留上下文）
-gpt 你好
+# Direct question (without context)
+gpt "Hello"
 
-# 使用特定机器人
-gpt -b programmer "解释一下什么是闭包"
+# Use a specific bot
+gpt -b programmer "Explain what closures are"
 
-# 复杂问题
-gpt "解释一下什么是闭包"
-[按 Ctrl+C 可以随时取消生成]
+# Complex question
+gpt "Explain what closures are"
+[Press Ctrl+C to cancel generation at any time]
 ```
 
-### 配置管理
+### Configuration management
 ```bash
-# 打开配置文件
+# Open configuration file
 gpt config
 
-# 显示当前配置
+# Display current configuration
 gpt config show
 
-# 设置API密钥
+# Set API key
 gpt config key sk-xxxxxxxxxxxxxxxx
 
-# 设置API URL（使用其他兼容服务）
+# Set API URL (use other compatible services)
 gpt config url https://api.example.com/v1/chat/completions
 
-# 设置默认模型
+# Set default model
 gpt config model gpt-4
 
-# 设置系统提示词
-gpt config system "你是一个专业的程序员"
+# Set system prompt
+gpt config system "You are a professional programmer"
 
-# 清除系统提示词
+# Clear system prompt
 gpt config system
 
-# 设置流式输出
+# Set streaming output
 gpt config stream true
 ```
 
-### 机器人管理
+### Bot management
 ```bash
-# 列出所有机器人
+# List all bots
 gpt bots list
 
-# 添加新机器人
-gpt bots add coder -s "你是一个资深的代码审查专家，擅长代码优化和最佳实践建议。"
+# Add new bot
+gpt bots add coder -s "You are a senior code review expert, good at code optimization and best practice suggestions."
 
-# 删除机器人
+# Delete bot
 gpt bots remove coder
 
-# 使用机器人（单次对话）
-gpt -b programmer "解释一下设计模式"
+# Use bot (single conversation)
+gpt -b programmer "Explain design patterns"
 
-# 使用机器人（交互模式）
+# Use bot (interactive mode)
 gpt -b programmer
+
+# Manage aliases
+gpt bots alias                           # show alias help
+gpt bots alias set programmer p          # set alias 'p' for bot 'programmer'
+gpt bots alias remove p                  # remove alias 'p'
+gpt bots alias list                      # list all aliases
+
+# Use bot with alias (single conversation)
+gpt -t p "Explain design patterns"
+
+# Use bot with alias (interactive mode)
+gpt -t p
 ```
 
-## 支持的服务
+### Alias management
+```bash
+# List all aliases
+gpt config alias list
+```
 
-本工具支持所有兼容OpenAI API的服务，包括但不限于：
+## Supported services
+
+This tool supports all compatible services with the OpenAI API, including but not limited to:
 
 1. OpenAI
    ```bash
@@ -181,25 +199,25 @@ gpt -b programmer
    gpt config url https://api.deepseek.com/v1/chat/completions
    ```
 
-3. 其他兼容服务
+3. Other compatible services
    - Azure OpenAI
    - Claude API
-   - 本地部署的开源模型（如使用LMStudio）
+   - Local deployment of open source models (such as using LMStudio)
 
-## 注意事项
+## Notes
 
-- 请确保你有相应服务的有效API密钥
-- API调用可能会产生费用，请参考各服务提供商的定价策略
-- 请妥善保管你的API密钥，不要将其提交到版本控制系统中
-- 不同的模型可能有不同的定价和功能限制
-- 各服务提供商的API可能有不同的使用限制和响应特点
-- 配置文件修改后立即生效，无需重启程序
-- 配置文件和API密钥都保存在用户主目录下，便于管理
-- 交互模式下的对话历史会保留在内存中，关闭程序后会清除
-- 预设机器人可以帮助你快速切换不同的对话角色和场景
-- 机器人可以在单次对话和交互模式下使用
-- 在生成回答过程中，可以随时按 Ctrl+C 取消生成
+- Ensure you have a valid API key for the corresponding service
+- API calls may incur costs, please refer to the pricing strategies of the service providers
+- Please keep your API key secure and do not submit it to version control systems
+- Different models may have different pricing and feature limitations
+- The APIs of different service providers may have different usage limits and response characteristics
+- Configuration file changes take effect immediately without restarting the program
+- Configuration files and API keys are stored in the user's home directory for easy management
+- Conversation history in interactive mode is retained in memory and cleared when the program is closed
+- Preset bots help you quickly switch between different conversation roles and scenarios
+- Bots can be used in single conversations and interactive mode
+- You can press Ctrl+C to cancel generation at any time during the generation process
 
-# 打包
+# Build
 
-使用 `cargo build --release` 构建。
+Use `cargo build --release` to build.

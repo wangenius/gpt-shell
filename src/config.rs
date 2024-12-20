@@ -2,7 +2,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::env;
-use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use anyhow::Result;
 use colored::*;
@@ -19,8 +18,6 @@ pub struct Config {
     pub stream: bool,
     #[serde(default)]
     pub system_prompt: Option<String>,
-    #[serde(default)]
-    pub aliases: HashMap<String, String>,
 }
 
 fn default_api_url() -> String {
@@ -43,7 +40,6 @@ impl Default for Config {
             model: default_model(),
             stream: default_stream(),
             system_prompt: None,
-            aliases: HashMap::new(),
         }
     }
 }
@@ -56,39 +52,39 @@ impl Config {
                     Ok(content) => match toml::from_str(&content) {
                         Ok(config) => Ok(config),
                         Err(_) => {
-                            println!("配置文件格式有误，将使用默认配置。");
-                            println!("请使用以下命令设置必要的配置：");
-                            println!("  gpt config key <your-api-key>  # 设置API密钥");
-                            println!("  gpt config url <api-url>       # 设置API URL（可选）");
-                            println!("  gpt config model <model-name>  # 设置默认模型（可选）");
+                            println!("config file format error, using default config.");
+                            println!("please use the following commands to set necessary config:");
+                            println!("  gpt config key <your-api-key>  # set API key");
+                            println!("  gpt config url <api-url>       # set API URL (optional)");
+                            println!("  gpt config model <model-name>  # set default model (optional)");
                             Ok(Config::default())
                         }
                     },
                     Err(_) => {
-                        println!("无法读取配置文件，将使用默认配置。");
+                        println!("failed to read config file, using default config.");
                         Ok(Config::default())
                     }
                 }
             } else {
                 let config = Config::default();
                 if let Err(e) = config.save() {
-                    println!("警告：无法保存默认配置文件：{}", e);
+                    println!("warning: failed to save default config file: {}", e);
                 }
-                println!("已创建默认配置文件，请设置必要的配置：");
-                println!("  gpt config key <your-api-key>  # 设置API密钥");
-                println!("  gpt config url <api-url>       # 设置API URL（可选）");
-                println!("  gpt config model <model-name>  # 设置默认模型（可选）");
+                println!("created default config file, please set necessary config:");
+                println!("  gpt config key <your-api-key>  # set API key");
+                println!("  gpt config url <api-url>       # set API URL (optional)");
+                println!("  gpt config model <model-name>  # set default model (optional)");
                 Ok(config)
             }
         } else {
-            println!("无法确定配置文件位置，将使用默认配置。");
+            println!("failed to determine config file location, using default config.");
             Ok(Config::default())
         }
     }
     
     pub fn save(&self) -> Result<()> {
         if let Some(path) = Self::get_path() {
-            // 确保目录存在
+            // ensure directory exists
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent)?;
             }
@@ -125,14 +121,14 @@ impl Config {
     pub fn set_key(&mut self, key: String) -> Result<()> {
         self.api_key = key;
         self.save()?;
-        println!("API密钥已更新");
+        println!("API key updated");
         Ok(())
     }
 
     pub fn set_url(&mut self, url: String) -> Result<()> {
         self.api_url = url;
         self.save()?;
-        println!("API URL已更新");
+        println!("API URL updated");
         Ok(())
     }
 
@@ -140,58 +136,21 @@ impl Config {
         let model_str = model.clone();
         self.model = model;
         self.save()?;
-        println!("默认模型已更新为: {}", model_str.green());
+        println!("default model updated to: {}", model_str.green());
         Ok(())
     }
 
     pub fn set_system_prompt(&mut self, prompt: Option<String>) -> Result<()> {
         self.system_prompt = prompt;
         self.save()?;
-        println!("系统提示词已更新");
+        println!("system prompt updated");
         Ok(())
     }
 
     pub fn set_stream(&mut self, enabled: bool) -> Result<()> {
         self.stream = enabled;
         self.save()?;
-        println!("流式输出已{}启用", if enabled { "" } else { "禁" });
+        println!("stream output {}", if enabled { "enabled" } else { "disabled" });
         Ok(())
-    }
-
-    pub fn set_alias(&mut self, bot_name: String, alias: String) -> Result<()> {
-        if alias.len() != 1 {
-            return Err(anyhow::anyhow!("别名必须是单个字符"));
-        }
-        let alias_str = alias.clone();
-        self.aliases.insert(alias, bot_name.clone());
-        self.save()?;
-        println!("已设置别名: {} -> {}", alias_str.green(), bot_name.green());
-        Ok(())
-    }
-
-    pub fn remove_alias(&mut self, alias: &str) -> Result<()> {
-        if let Some(bot_name) = self.aliases.remove(alias) {
-            self.save()?;
-            println!("已删除别名: {} -> {}", alias.green(), bot_name.green());
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("未找到别名: {}", alias))
-        }
-    }
-
-    pub fn list_aliases(&self) {
-        if self.aliases.is_empty() {
-            println!("还没有设置任何别名");
-            return;
-        }
-
-        println!("当前别名：");
-        for (alias, bot_name) in &self.aliases {
-            println!("- {} -> {}", alias.green(), bot_name.green());
-        }
-    }
-
-    pub fn get_bot_by_alias(&self, alias: &str) -> Option<&String> {
-        self.aliases.get(alias)
     }
 } 

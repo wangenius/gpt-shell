@@ -2,7 +2,7 @@ mod llm_provider;
 mod config;
 mod bots;
 
-use clap::{Parser, Subcommand};
+use clap::{Command, Arg};
 use colored::*;
 use dotenv::dotenv;
 use anyhow::Result;
@@ -15,103 +15,105 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use ctrlc;
 
-#[derive(Parser)]
-#[command(author, version, about = "GPT Shell - 命令行AI助手")]
-struct Cli {
-    #[command(subcommand)]
-    command: Option<Commands>,
+fn build_cli() -> Command {
+    let mut cmd = Command::new("gpt")
+        .version(env!("CARGO_PKG_VERSION"))
+        .author(env!("CARGO_PKG_AUTHORS"))
+        .about("GPT Shell - command line AI assistant")
+        .arg(
+            Arg::new("bot")
+                .short('b')
+                .long("bot")
+                .help("use specified bot")
+                .value_name("BOT")
+        )
+        .arg(
+            Arg::new("prompt")
+                .help("prompt text to send to GPT")
+                .required(false)
+        );
 
-    /// 使用指定的机器人
-    #[arg(short, long)]
-    bot: Option<String>,
+    // 添加子命令
+    cmd = cmd.subcommand(
+        Command::new("config")
+            .about("config management")
+            .subcommand(
+                Command::new("key")
+                    .about("set api key")
+                    .arg(Arg::new("key").required(true))
+            )
+            .subcommand(
+                Command::new("url")
+                    .about("set api url")
+                    .arg(Arg::new("url").required(true))
+            )
+            .subcommand(
+                Command::new("model")
+                    .about("set model")
+                    .arg(Arg::new("model").required(true))
+            )
+            .subcommand(
+                Command::new("system")
+                    .about("set system prompt")
+                    .arg(Arg::new("prompt").required(false))
+            )
+            .subcommand(
+                Command::new("stream")
+                    .about("set stream output")
+                    .arg(Arg::new("enabled").required(true))
+            )
+            .subcommand(
+                Command::new("show")
+                    .about("show current config")
+            )
+    );
 
-    /// 使用别名指定机器人（单字符）
-    #[arg(short = 't')]
-    alias: Option<String>,
+    cmd = cmd.subcommand(
+        Command::new("bots")
+            .about("bot management")
+            .subcommand(
+                Command::new("add")
+                    .about("add new bot")
+                    .arg(Arg::new("name").required(true))
+                    .arg(
+                        Arg::new("system")
+                            .short('s')
+                            .long("system")
+                            .required(true)
+                    )
+            )
+            .subcommand(
+                Command::new("remove")
+                    .about("remove bot")
+                    .arg(Arg::new("name").required(true))
+            )
+            .subcommand(
+                Command::new("list")
+                    .about("list all bots")
+            )
+            .subcommand(
+                Command::new("alias")
+                    .about("alias management")
+                    .subcommand(
+                        Command::new("set")
+                            .about("set bot alias")
+                            .arg(Arg::new("bot").required(true))
+                            .arg(Arg::new("alias").required(true))
+                    )
+                    .subcommand(
+                        Command::new("remove")
+                            .about("remove alias")
+                            .arg(Arg::new("alias").required(true))
+                    )
+                    .subcommand(
+                        Command::new("list")
+                            .about("list all aliases")
+                    )
+            )
+    );
 
-    /// 要发送给GPT的提示文本
-    #[arg(default_value = None, required = false)]
-    prompt: Option<String>,
+    cmd
 }
-
-#[derive(Subcommand)]
-enum Commands {
-    /// 配置管理
-    Config {
-        #[command(subcommand)]
-        action: Option<ConfigActions>,
-    },
-    /// 机器人管理
-    Bots {
-        #[command(subcommand)]
-        action: Option<BotsActions>,
-    },
-}
-
-#[derive(Subcommand)]
-enum ConfigActions {
-    /// 设置API密钥
-    Key {
-        /// API密钥
-        key: String,
-    },
-    /// 设置API URL
-    Url {
-        /// API URL
-        url: String,
-    },
-    /// 设置默认模型
-    Model {
-        /// 模型名称
-        model: String,
-    },
-    /// 设置系统提示词
-    System {
-        /// 系统提示词（不提供则清除）
-        prompt: Option<String>,
-    },
-    /// 设置是否使用流式输出
-    Stream {
-        /// 是否启用（true 或 false）
-        enabled: bool,
-    },
-    /// 显示当前配置
-    Show,
-    /// 设置机器人别名
-    Alias {
-        /// 机器人名称
-        bot: String,
-        /// 单字符别名
-        alias: String,
-    },
-    /// 删除机器人别名
-    Unalias {
-        /// 要删除的别名
-        alias: String,
-    },
-    /// 列出所有别名
-    Aliases,
-}
-
-#[derive(Subcommand)]
-enum BotsActions {
-    /// 添加新机器人
-    Add {
-        /// 机器人名称
-        name: String,
-        /// 系统提示词
-        #[arg(short, long)]
-        system: String,
-    },
-    /// 删除机器人
-    Remove {
-        /// 机器人名称
-        name: String,
-    },
-    /// 列出所有机器人
-    List,
-}
-
 
 async fn chat_once(config: &Config, messages: Vec<Message>, running: Arc<AtomicBool>) -> Result<String> {
     let provider = OpenAIProvider::new(config.api_key.clone())
@@ -129,16 +131,16 @@ async fn chat_once(config: &Config, messages: Vec<Message>, running: Arc<AtomicB
                 response.push_str(&content);
             }
             Err(e) => {
-                eprintln!("\n错误: {}", e);
+                eprintln!("\nerror: {}", e);
                 break;
             }
             _ => {}
         }
     }
 
-    // 如果是因为中断而退出，打印提示
+    // if cancelled by interrupt, print prompt
     if !running.load(Ordering::SeqCst) {
-        println!("\n已取消生成。");
+        println!("\ncancelled");
     } else {
         println!();
     }
@@ -148,27 +150,26 @@ async fn chat_once(config: &Config, messages: Vec<Message>, running: Arc<AtomicB
 
 async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config: BotsConfig, running: Arc<AtomicBool>) -> Result<()> {
     let mut messages = Vec::new();
-    
-    // 如果指定了机器人，使用机器人的系统提示词
+    // if specified bot, use bot's system prompt
     if let Some(bot_name) = bot_name {
         if let Some(bot) = bots_config.get_bot(&bot_name) {
             messages.push(Message {
                 role: "system".to_string(),
                 content: bot.system_prompt.clone(),
             });
-            println!("使用机器人: {}", bot_name.green());
+            println!("using bot: {}", bot_name.green());
         } else {
-            return Err(anyhow::anyhow!("未找到机器人: {}", bot_name));
+            return Err(anyhow::anyhow!("bot not found: {}", bot_name));
         }
     } else if let Some(ref system_prompt) = config.system_prompt {
-        // 否则使用默认系统提示词
+        // otherwise use default system prompt
         messages.push(Message {
             role: "system".to_string(),
             content: system_prompt.clone(),
         });
     }
 
-    println!("进入交互模式 (输入 'exit' 或按 Ctrl+C 退出)");
+    println!("enter interactive mode (input 'exit' or press Ctrl+C to exit)");
     println!("---------------------------------------------");
 
     let stdin = io::stdin();
@@ -176,7 +177,7 @@ async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config:
     let mut input = String::new();
 
     loop {
-        // 重置中断标志
+        // reset interrupt flag
         running.store(true, Ordering::SeqCst);
 
         print!("> ");
@@ -195,16 +196,16 @@ async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config:
             break;
         }
 
-        // 添加用户消息
+        // add user message
         messages.push(Message {
             role: "user".to_string(),
             content: input.to_string(),
         });
 
-        // 获取助手回复
+        // get assistant response
         let response = chat_once(&config, messages.clone(), running.clone()).await?;
 
-        // 只有在有响应时才添加到历史记录
+        // only add to history if there is a response
         if !response.is_empty() {
             messages.push(Message {
                 role: "assistant".to_string(),
@@ -213,23 +214,50 @@ async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config:
         }
     }
 
-    println!("再见！");
+    println!("bye!");
     Ok(())
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // 加载环境变量
+    // load environment variables
     dotenv().ok();
     
-    // 加载配置
+    // load config
     let mut config = Config::load()?;
     let mut bots_config = BotsConfig::load()?;
     
-    // 获取命令行参数
-    let cli = Cli::parse();
+    // build and get command line arguments
+    let mut cmd = build_cli();
+    
+    // 为每个别名添加短参数
+    let aliases: Vec<(String, String)> = bots_config.aliases.iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    
+    // 添加别名参数
+    let mut alias_args = Vec::new();
+    for (alias, _) in &aliases {
+        if let Some(c) = alias.chars().next() {
+            let id = format!("alias_{}", alias);
+            let id_static = Box::leak(id.into_boxed_str()) as &'static str;
+            alias_args.push(
+                Arg::new(id_static)
+                    .short(c)
+                    .help(format!("use bot alias '{}'", alias))
+                    .action(clap::ArgAction::SetTrue)
+            );
+        }
+    }
+    
+    // 将别名参数添加到命令中
+    for arg in alias_args {
+        cmd = cmd.arg(arg);
+    }
+    
+    let matches = cmd.get_matches();
 
-    // 设置中断处理
+    // set interrupt handler
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     
@@ -237,134 +265,157 @@ async fn main() -> Result<()> {
         r.store(false, Ordering::SeqCst);
     })?;
 
-    match (&cli.command, &cli.prompt) {
-        (Some(Commands::Config { action }), _) => {
-            match action {
-                Some(ConfigActions::Key { key }) => {
-                    config.set_key(key.clone())?;
+    // 检查是否使用了别名
+    let mut bot_name = None;
+    for (alias, _) in &aliases {
+        let id = format!("alias_{}", alias);
+        if matches.get_flag(&id) {
+            if let Some(bot) = bots_config.get_bot_by_alias(alias) {
+                bot_name = Some(bot.to_string());
+                break;
+            }
+        }
+    }
+
+    // 如果没有使用别名，检查是否使用了 --bot 参数
+    if bot_name.is_none() {
+        bot_name = matches.get_one::<String>("bot").cloned();
+    }
+
+    // 处理子命令或提示词
+    match matches.subcommand() {
+        Some(("config", sub_matches)) => {
+            match sub_matches.subcommand() {
+                Some(("key", key_matches)) => {
+                    if let Some(key) = key_matches.get_one::<String>("key") {
+                        config.set_key(key.clone())?;
+                    }
                 }
-                Some(ConfigActions::Url { url }) => {
-                    config.set_url(url.clone())?;
+                Some(("url", url_matches)) => {
+                    if let Some(url) = url_matches.get_one::<String>("url") {
+                        config.set_url(url.clone())?;
+                    }
                 }
-                Some(ConfigActions::Model { model }) => {
-                    config.set_model(model.clone())?;
+                Some(("model", model_matches)) => {
+                    if let Some(model) = model_matches.get_one::<String>("model") {
+                        config.set_model(model.clone())?;
+                    }
                 }
-                Some(ConfigActions::System { prompt }) => {
-                    config.set_system_prompt(prompt.clone())?;
+                Some(("system", system_matches)) => {
+                    let prompt = system_matches.get_one::<String>("prompt").cloned();
+                    config.set_system_prompt(prompt)?;
                 }
-                Some(ConfigActions::Stream { enabled }) => {
-                    config.set_stream(*enabled)?;
+                Some(("stream", stream_matches)) => {
+                    if let Some(enabled) = stream_matches.get_one::<String>("enabled") {
+                        config.set_stream(enabled.parse()?)?;
+                    }
                 }
-                Some(ConfigActions::Show) => {
-                    println!("当前配置：");
-                    println!("API密钥: {}", if config.api_key.is_empty() { 
-                        "未设置".red() 
+                Some(("show", _)) => {
+                    println!("current config:");
+                    println!("API key: {}", if config.api_key.is_empty() { 
+                        "not set".red() 
                     } else { 
-                        "已设置".green() 
+                        "set".green() 
                     });
                     println!("API URL: {}", config.api_url.green());
-                    println!("默认模型: {}", config.model.green());
-                    println!("流式输出: {}", if config.stream { 
-                        "启用".green() 
+                    println!("default model: {}", config.model.green());
+                    println!("stream output: {}", if config.stream { 
+                        "enabled".green() 
                     } else { 
-                        "禁用".yellow() 
+                        "disabled".yellow() 
                     });
-                    println!("系统提示词: {}", config.system_prompt.as_ref().map(|p| p.as_str()).unwrap_or("未设置").green());
+                    println!("system prompt: {}", config.system_prompt.as_ref().map(|p| p.as_str()).unwrap_or("not set").green());
                 }
-                Some(ConfigActions::Alias { bot, alias }) => {
-                    // 先检查机器人是否存在
-                    if !bots_config.get_bot(bot).is_some() {
-                        return Err(anyhow::anyhow!("未找到机器人: {}", bot));
-                    }
-                    config.set_alias(bot.clone(), alias.clone())?;
-                }
-                Some(ConfigActions::Unalias { alias }) => {
-                    config.remove_alias(&alias)?;
-                }
-                Some(ConfigActions::Aliases) => {
-                    config.list_aliases();
-                }
-                None => {
+                _ => {
                     Config::open_config()?;
                 }
             }
         }
-        (Some(Commands::Bots { action }), _) => {
-            match action {
-                Some(BotsActions::Add { name, system }) => {
-                    bots_config.add_bot(name.clone(), system.clone())?;
+        Some(("bots", sub_matches)) => {
+            match sub_matches.subcommand() {
+                Some(("add", add_matches)) => {
+                    if let (Some(name), Some(system)) = (
+                        add_matches.get_one::<String>("name"),
+                        add_matches.get_one::<String>("system")
+                    ) {
+                        bots_config.add_bot(name.clone(), system.clone())?;
+                    }
                 }
-                Some(BotsActions::Remove { name }) => {
-                    bots_config.remove_bot(name)?;
+                Some(("remove", remove_matches)) => {
+                    if let Some(name) = remove_matches.get_one::<String>("name") {
+                        bots_config.remove_bot(name)?;
+                    }
                 }
-                Some(BotsActions::List) => {
+                Some(("list", _)) => {
                     bots_config.list_bots();
                 }
-                None => {
-                    // 直接打开配置文件
+                Some(("alias", alias_matches)) => {
+                    match alias_matches.subcommand() {
+                        Some(("set", set_matches)) => {
+                            if let (Some(bot), Some(alias)) = (
+                                set_matches.get_one::<String>("bot"),
+                                set_matches.get_one::<String>("alias")
+                            ) {
+                                bots_config.set_alias(bot.clone(), alias.clone())?;
+                            }
+                        }
+                        Some(("remove", remove_matches)) => {
+                            if let Some(alias) = remove_matches.get_one::<String>("alias") {
+                                bots_config.remove_alias(alias)?;
+                            }
+                        }
+                        Some(("list", _)) => {
+                            bots_config.list_aliases();
+                        }
+                        _ => {
+                            println!("available alias commands:");
+                            println!("  gpt bots alias set <bot> <alias>  # set bot alias");
+                            println!("  gpt bots alias remove <alias>     # remove alias");
+                            println!("  gpt bots alias list               # list all aliases");
+                        }
+                    }
+                }
+                _ => {
                     BotsConfig::open_config()?;
                 }
             }
         }
-        (None, Some(prompt)) => {
-            // 重置中断标志
-            running.store(true, Ordering::SeqCst);
+        _ => {
+            // 获取提示词
+            if let Some(prompt) = matches.get_one::<String>("prompt") {
+                // 单次对话模式
+                let mut messages = Vec::new();
 
-            // 创建消息列表
-            let mut messages = Vec::new();
-
-            // 检查是否使用了别名
-            let bot_name = if let Some(alias) = &cli.alias {
-                if let Some(bot_name) = config.get_bot_by_alias(alias) {
-                    Some(bot_name.clone())
-                } else {
-                    return Err(anyhow::anyhow!("未找到别名对应的机器人: {}", alias));
-                }
-            } else {
-                cli.bot.clone()
-            };
-
-            // 如果指定了机器人，使用机器人的系统提示词
-            if let Some(bot_name) = &bot_name {
-                if let Some(bot) = bots_config.get_bot(bot_name) {
+                // 如果指定了机器人，使用机器人的系统提示词
+                if let Some(bot_name) = &bot_name {
+                    if let Some(bot) = bots_config.get_bot(bot_name) {
+                        messages.push(Message {
+                            role: "system".to_string(),
+                            content: bot.system_prompt.clone(),
+                        });
+                    } else {
+                        return Err(anyhow::anyhow!("bot not found: {}", bot_name));
+                    }
+                } else if let Some(ref system_prompt) = config.system_prompt {
+                    // 否则使用默认系统提示词
                     messages.push(Message {
                         role: "system".to_string(),
-                        content: bot.system_prompt.clone(),
+                        content: system_prompt.clone(),
                     });
-                } else {
-                    return Err(anyhow::anyhow!("未找到机器人: {}", bot_name));
                 }
-            } else if let Some(ref system_prompt) = config.system_prompt {
-                // 否则使用默认系统提示词
+
+                // 添加用户消息
                 messages.push(Message {
-                    role: "system".to_string(),
-                    content: system_prompt.clone(),
+                    role: "user".to_string(),
+                    content: prompt.clone(),
                 });
-            }
 
-            // 添加用户消息
-            messages.push(Message {
-                role: "user".to_string(),
-                content: prompt.clone(),
-            });
-
-            // 发送消息并获取回复
-            chat_once(&config, messages, running).await?;
-        }
-        (None, None) => {
-            // 检查是否使用了别名
-            let bot_name = if let Some(alias) = cli.alias {
-                if let Some(bot_name) = config.get_bot_by_alias(&alias) {
-                    Some(bot_name.clone())
-                } else {
-                    return Err(anyhow::anyhow!("未找到别名对应的机器人: {}", alias));
-                }
+                // 发送消息并获取回复
+                chat_once(&config, messages, running).await?;
             } else {
-                cli.bot
-            };
-
-            // 进入交互模式
-            interactive_mode(config, bot_name, bots_config, running).await?;
+                // 交互模式
+                interactive_mode(config, bot_name, bots_config, running).await?;
+            }
         }
     }
     

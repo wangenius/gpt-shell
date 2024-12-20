@@ -2,8 +2,8 @@
 name = "gpt-shell"
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <your.email@example.com>"]
-description = "GPT Shell - 命令行AI助手"
+authors = ["wangenius <wangenius@qq.com>"]
+description = "GPT Shell - command line AI assistant"
 
 [[bin]]
 name = "gpt"
