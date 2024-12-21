@@ -1,5 +1,7 @@
 # GPT Shell
 
+![icon](assets/icon.png)
+
 A versatile command-line tool for interacting with various Large Language Models through the terminal.
 
 ## Key Features
@@ -25,69 +27,13 @@ A versatile command-line tool for interacting with various Large Language Models
 
 ## Installation
 
-Ensure you have Rust installed, then:
+windows执行(目前linux和mac未测试)：
 
-```bash
-# Build
-cargo build --release
-
-# Install (copy binary to system path)
-# Windows (PowerShell):
-Copy-Item "target/release/gpt.exe" "$env:USERPROFILE/bin/gpt.exe"
-# Linux/macOS:
-cp target/release/gpt ~/.local/bin/
+执行：
+```powershell
+irm https://raw.githubusercontent.com/wangenius/gpt-shell/refs/heads/master/install.ps1 | iex
 ```
-
-## Configuration
-
-### Config File
-The program automatically creates a configuration file in your home directory:
-- Windows: `%USERPROFILE%\.gpt-shell\config.toml`
-- Linux/macOS: `~/.gpt-shell/config.toml`
-
-Example configuration:
-```toml
-# Model configurations
-[models.openai]
-api_key = "your-api-key-here"
-api_url = "https://api.openai.com/v1/chat/completions"
-model = "gpt-3.5-turbo"
-
-[models.deepseek]
-api_key = "your-deepseek-key"
-api_url = "https://api.deepseek.com/v1/chat/completions"
-model = "deepseek-chat"
-
-# Current active model
-current_model = "openai"
-
-# Whether to use streaming output
-stream = true
-
-# System prompt (optional)
-system_prompt = "You are a helpful AI assistant."
-```
-
-### Bot Configuration
-Bot configurations are stored in:
-- Windows: `%USERPROFILE%\.gpt-shell\bots.toml`
-- Linux/macOS: `~/.gpt-shell/bots.toml`
-
-Example bot configuration:
-```toml
-[bots.programmer]
-name = "programmer"
-system_prompt = "You are a professional programmer, proficient in various programming languages and software development best practices."
-
-[bots.teacher]
-name = "teacher"
-system_prompt = "You are a patient teacher, good at explaining complex concepts in simple ways."
-
-# Bot aliases (single character shortcuts)
-[aliases]
-p = "programmer"
-t = "teacher"
-```
+之后即可使用。
 
 ## Usage
 
@@ -133,7 +79,7 @@ Goodbye!
 gpt "Hello"
 
 # Use a specific bot
-gpt -b programmer "Explain closures"
+gpt -bot programmer "Explain closures"
 
 # Use a bot alias
 gpt -p "Explain closures"

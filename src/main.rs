@@ -115,7 +115,6 @@ fn build_cli() -> Command {
         .about("GPT Shell - command line AI assistant")
         .arg(
             Arg::new("bot")
-                .short('b')
                 .long("bot")
                 .help("use specified bot")
                 .value_name("BOT")
