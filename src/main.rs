@@ -14,6 +14,101 @@ use bots::BotsConfig;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use ctrlc;
+use reqwest;
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command as ProcessCommand;
+
+const GITHUB_REPO: &str = "wangenius/gpt-shell";
+const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+async fn check_update() -> Result<Option<String>> {
+    let client = reqwest::Client::new();
+    let releases_url = format!("https://api.github.com/repos/{}/releases/latest", GITHUB_REPO);
+    
+    let response = client.get(&releases_url)
+        .header("User-Agent", "gpt-shell")
+        .send()
+        .await?;
+        
+    if response.status().is_success() {
+        let release: serde_json::Value = response.json().await?;
+        let latest_version = release["tag_name"].as_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid release format"))?
+            .trim_start_matches('v');
+            
+        if latest_version != CURRENT_VERSION {
+            Ok(Some(latest_version.to_string()))
+        } else {
+            Ok(None)
+        }
+    } else {
+        Err(anyhow::anyhow!("Failed to check for updates"))
+    }
+}
+
+async fn download_and_replace(version: &str) -> Result<()> {
+    let client = reqwest::Client::new();
+    let releases_url = format!("https://api.github.com/repos/{}/releases/latest", GITHUB_REPO);
+    
+    let response = client.get(&releases_url)
+        .header("User-Agent", "gpt-shell")
+        .send()
+        .await?;
+        
+    let release: serde_json::Value = response.json().await?;
+    let assets = release["assets"].as_array()
+        .ok_or_else(|| anyhow::anyhow!("No assets found"))?;
+        
+    // 根据操作系统选择正确的资产
+    let asset_name = if cfg!(target_os = "windows") {
+        "gpt-windows-amd64.exe"
+    } else if cfg!(target_os = "macos") {
+        "gpt-macos-amd64"
+    } else {
+        "gpt-linux-amd64"
+    };
+    
+    let download_url = assets.iter()
+        .find(|asset| asset["name"].as_str() == Some(asset_name))
+        .and_then(|asset| asset["browser_download_url"].as_str())
+        .ok_or_else(|| anyhow::anyhow!("Asset not found"))?;
+        
+    println!("Downloading update...");
+    
+    let response = client.get(download_url)
+        .header("User-Agent", "gpt-shell")
+        .send()
+        .await?;
+        
+    let bytes = response.bytes().await?;
+    
+    // 获取当前可执行文件的路径
+    let current_exe = std::env::current_exe()?;
+    let backup_path = current_exe.with_extension("old");
+    
+    // 备份当前可执行文件
+    if fs::rename(&current_exe, &backup_path).is_err() {
+        println!("Failed to create backup, skipping...");
+    }
+    
+    // 写入新的可执行文件
+    fs::write(&current_exe, bytes)?;
+    
+    // 设置执行权限（在Unix系统上）
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&current_exe)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&current_exe, perms)?;
+    }
+    
+    println!("Update completed successfully!");
+    println!("Please restart gpt-shell to use the new version.");
+    
+    Ok(())
+}
 
 fn build_cli() -> Command {
     let mut cmd = Command::new("gpt")
@@ -32,6 +127,12 @@ fn build_cli() -> Command {
                 .help("prompt text to send to GPT")
                 .required(false)
         );
+
+    // 添加子命令
+    cmd = cmd.subcommand(
+        Command::new("update")
+            .about("check for updates and update if available")
+    );
 
     // 添加子命令
     cmd = cmd.subcommand(
@@ -302,7 +403,7 @@ async fn main() -> Result<()> {
         }
     }
     
-    // 将别名参数添加到命令中
+    // 将别名参数添加���命令中
     for arg in alias_args {
         cmd = cmd.arg(arg);
     }
@@ -470,6 +571,21 @@ async fn main() -> Result<()> {
                 _ => {
                     // 默认显示机器人列表
                     bots_config.list_bots();
+                }
+            }
+        }
+        Some(("update", _)) => {
+            println!("Checking for updates...");
+            match check_update().await? {
+                Some(version) => {
+                    println!("New version {} available! (current: {})", version.green(), CURRENT_VERSION);
+                    println!("Downloading and installing update...");
+                    if let Err(e) = download_and_replace(&version).await {
+                        println!("Failed to update: {}", e);
+                    }
+                }
+                None => {
+                    println!("You are already using the latest version ({})", CURRENT_VERSION.green());
                 }
             }
         }
