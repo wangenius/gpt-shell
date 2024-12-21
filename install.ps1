@@ -13,23 +13,23 @@ if (-not (Test-Path $tempDir)) {
 # 创建目标目录
 $binPath = Join-Path $userProfile "bin"
 if (-not (Test-Path $binPath)) {
-    Write-Host "正在创建目录: $binPath" -ForegroundColor Yellow
+    Write-Host "Creating new Path: $binPath" -ForegroundColor Yellow
     New-Item -ItemType Directory -Path $binPath | Out-Null
 }
 
 try {
-    # 获取最新版本信息
-    Write-Host "正在检查最新版本..." -ForegroundColor Cyan
+    # Get Latest version
+    Write-Host "checking latest version..." -ForegroundColor Cyan
     $apiUrl = "https://api.github.com/repos/wangenius/gpt-shell/releases/latest"
     $release = Invoke-RestMethod -Uri $apiUrl -Headers @{
         "Accept" = "application/vnd.github.v3+json"
         "User-Agent" = "PowerShell"
     }
 
-    # 获取 Windows 版本的下载链接
+    # get Windows 版本的下载链接
     $asset = $release.assets | Where-Object { $_.name -eq "gpt-windows-amd64.exe" }
     if (-not $asset) {
-        throw "找不到 Windows 版本的可执行文件"
+        throw "can't find executive application of Windows version"
     }
 
     # 下载文件
