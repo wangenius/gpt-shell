@@ -16,8 +16,6 @@ use std::sync::Arc;
 use ctrlc;
 use reqwest;
 use std::fs;
-use std::path::PathBuf;
-use std::process::Command as ProcessCommand;
 
 const GITHUB_REPO: &str = "wangenius/gpt-shell";
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");

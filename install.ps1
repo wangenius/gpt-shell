@@ -4,54 +4,78 @@ $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIde
 # 获取用户主目录
 $userProfile = $env:USERPROFILE
 
+# 创建临时目录用于下载
+$tempDir = Join-Path $env:TEMP "gpt-shell-install"
+if (-not (Test-Path $tempDir)) {
+    New-Item -ItemType Directory -Path $tempDir | Out-Null
+}
+
 # 创建目标目录
 $binPath = Join-Path $userProfile "bin"
 if (-not (Test-Path $binPath)) {
-    Write-Host "creating directory: $binPath" -ForegroundColor Yellow
+    Write-Host "正在创建目录: $binPath" -ForegroundColor Yellow
     New-Item -ItemType Directory -Path $binPath | Out-Null
 }
 
-# 复制可执行文件
-$exePath = Join-Path $PSScriptRoot "target\release\gpt.exe"
-$targetPath = Join-Path $binPath "gpt.exe"
-
-if (-not (Test-Path $exePath)) {
-    Write-Host "error: executable file not found, please run 'cargo build --release'" -ForegroundColor Red
-    exit 1
-}
-
-Write-Host "copying gpt.exe to $targetPath" -ForegroundColor Yellow
-Copy-Item $exePath $targetPath -Force
-
-# 检查用户 PATH 环境变量中是否已包含 bin 目录
-$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if ($userPath -notlike "*$binPath*") {
-    Write-Host "adding $binPath to user PATH environment variable" -ForegroundColor Yellow
-    
-    if ($userPath) {
-        $newPath = "$userPath;$binPath"
-    } else {
-        $newPath = $binPath
-    }
-    
-    [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-    $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + $newPath
-}
-
-Write-Host "`ninstallation complete!" -ForegroundColor Green
-Write-Host "you can now use 'gpt' command in any directory." -ForegroundColor Green
-Write-Host "note: you may need to reopen the terminal to use the gpt command." -ForegroundColor Yellow
-
-# 检查是否已经构建了发布版本
-if ((Get-Item $exePath).Length -lt 1MB) {
-    Write-Host "`nwarning: executable file seems too small, may not be optimized. please run:" -ForegroundColor Yellow
-    Write-Host "cargo build --release" -ForegroundColor Cyan
-}
-
-# 显示版本信息
-Write-Host "`ncurrent version:" -ForegroundColor Cyan
 try {
-    & $targetPath --version
+    # 获取最新版本信息
+    Write-Host "正在检查最新版本..." -ForegroundColor Cyan
+    $apiUrl = "https://api.github.com/repos/wangenius/gpt-shell/releases/latest"
+    $release = Invoke-RestMethod -Uri $apiUrl -Headers @{
+        "Accept" = "application/vnd.github.v3+json"
+        "User-Agent" = "PowerShell"
+    }
+
+    # 获取 Windows 版本的下载链接
+    $asset = $release.assets | Where-Object { $_.name -eq "gpt-windows-amd64.exe" }
+    if (-not $asset) {
+        throw "找不到 Windows 版本的可执行文件"
+    }
+
+    # 下载文件
+    $downloadPath = Join-Path $tempDir "gpt.exe"
+    Write-Host "正在下载最新版本..." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $downloadPath
+
+    # 复制可执行文件到目标目录
+    $targetPath = Join-Path $binPath "gpt.exe"
+    Write-Host "正在安装到 $targetPath" -ForegroundColor Yellow
+    Copy-Item $downloadPath $targetPath -Force
+
+    # 检查用户 PATH 环境变量中是否已包含 bin 目录
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($userPath -notlike "*$binPath*") {
+        Write-Host "正在添加到环境变量 PATH..." -ForegroundColor Yellow
+        
+        if ($userPath) {
+            $newPath = "$userPath;$binPath"
+        } else {
+            $newPath = $binPath
+        }
+        
+        [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+        $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + $newPath
+    }
+
+    Write-Host "`n安装完成！" -ForegroundColor Green
+    Write-Host "现在你可以在任何目录使用 'gpt' 命令了。" -ForegroundColor Green
+    Write-Host "注意：你可能需要重新打开终端才能使用 gpt 命令。" -ForegroundColor Yellow
+
+    # 显示版本信息
+    Write-Host "`n当前版本:" -ForegroundColor Cyan
+    try {
+        & $targetPath --version
+    } catch {
+        Write-Host "无法获取版本信息" -ForegroundColor Red
+    }
+
 } catch {
-    Write-Host "failed to get version information" -ForegroundColor Red
-}
+    Write-Host "安装过程中出现错误：" -ForegroundColor Red
+    Write-Host $_.Exception.Message -ForegroundColor Red
+    exit 1
+} finally {
+    # 清理临时文件
+    if (Test-Path $tempDir) {
+        Remove-Item -Path $tempDir -Recurse -Force
+    }
+} 
