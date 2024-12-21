@@ -27,13 +27,13 @@ A versatile command-line tool for interacting with various Large Language Models
 
 ## Installation
 
-windows执行(目前linux和mac未测试)：
+Execute the following command in PowerShell (Windows):
 
-执行：
 ```powershell
 irm https://raw.githubusercontent.com/wangenius/gpt-shell/refs/heads/master/install.ps1 | iex
 ```
-之后即可使用。
+
+After installation, you can start using the tool immediately.
 
 ## Usage
 

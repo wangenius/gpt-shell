@@ -34,18 +34,18 @@ try {
 
     # 下载文件
     $downloadPath = Join-Path $tempDir "gpt.exe"
-    Write-Host "正在下载最新版本..." -ForegroundColor Cyan
+    Write-Host "downloading the latest version..." -ForegroundColor Cyan
     Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $downloadPath
 
     # 复制可执行文件到目标目录
     $targetPath = Join-Path $binPath "gpt.exe"
-    Write-Host "正在安装到 $targetPath" -ForegroundColor Yellow
+    Write-Host "install the latest version $targetPath" -ForegroundColor Yellow
     Copy-Item $downloadPath $targetPath -Force
 
     # 检查用户 PATH 环境变量中是否已包含 bin 目录
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     if ($userPath -notlike "*$binPath*") {
-        Write-Host "正在添加到环境变量 PATH..." -ForegroundColor Yellow
+        Write-Host "adding to env PATH..." -ForegroundColor Yellow
         
         if ($userPath) {
             $newPath = "$userPath;$binPath"
@@ -57,20 +57,20 @@ try {
         $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + $newPath
     }
 
-    Write-Host "`n安装完成！" -ForegroundColor Green
-    Write-Host "现在你可以在任何目录使用 'gpt' 命令了。" -ForegroundColor Green
-    Write-Host "注意：你可能需要重新打开终端才能使用 gpt 命令。" -ForegroundColor Yellow
+    Write-Host "`nfinished！" -ForegroundColor Green
+    Write-Host "now you can use 'gpt' command in anywhere!" -ForegroundColor Green
+    Write-Host "warning: you probably need to reopen the terminal to use it." -ForegroundColor Yellow
 
     # 显示版本信息
-    Write-Host "`n当前版本:" -ForegroundColor Cyan
+    Write-Host "`ncurrent version:" -ForegroundColor Cyan
     try {
         & $targetPath --version
     } catch {
-        Write-Host "无法获取版本信息" -ForegroundColor Red
+        Write-Host "`ncan get the version info" -ForegroundColor Red
     }
 
 } catch {
-    Write-Host "安装过程中出现错误：" -ForegroundColor Red
+    Write-Host "there are errors in the process of installation：" -ForegroundColor Red
     Write-Host $_.Exception.Message -ForegroundColor Red
     exit 1
 } finally {

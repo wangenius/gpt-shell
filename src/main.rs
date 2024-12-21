@@ -45,7 +45,7 @@ async fn check_update() -> Result<Option<String>> {
     }
 }
 
-async fn download_and_replace(version: &str) -> Result<()> {
+async fn download_and_replace(_version: &str) -> Result<()> {
     let client = reqwest::Client::new();
     let releases_url = format!("https://api.github.com/repos/{}/releases/latest", GITHUB_REPO);
     
