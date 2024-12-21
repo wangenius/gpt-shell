@@ -22,6 +22,7 @@ A versatile command-line tool for interacting with various Large Language Models
   - Claude API
   - Local LLMs (via compatible servers like LMStudio)
 
+
 ## Installation
 
 Ensure you have Rust installed, then:
