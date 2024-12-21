@@ -20,23 +20,50 @@ pub struct Config {
     pub models: HashMap<String, ModelConfig>,
     #[serde(default)]
     pub current_model: Option<String>,
-    #[serde(default)]
+    #[serde(default = "default_model")]
     pub system_prompt: Option<String>,
-    #[serde(default)]
+    #[serde(default = "default_stream")]
     pub stream: bool,
+}
+
+fn default_model() -> Option<String> {
+    Some("your are a AI assistant".to_string())
+}
+
+
+fn default_stream() -> bool {
+    true
 }
 
 impl Config {
     pub fn load() -> Result<Self> {
         if let Some(path) = Self::get_path() {
-            if path.exists() {
+            let mut config = if path.exists() {
                 let content = fs::read_to_string(&path)?;
-                Ok(toml::from_str(&content)?)
+                toml::from_str(&content)?
             } else {
                 let config = Config::default();
                 config.save()?;
-                Ok(config)
+                config
+            };
+
+            // 如果没有当前模型，添加一个默认的 OpenAI 配置
+            if config.current_model.is_none() {
+                let default_name = "openai";
+                let model_config = ModelConfig {
+                    api_key: String::new(),
+                    api_url: "https://api.openai.com/v1/chat/completions".to_string(),
+                    model: "gpt-3.5-turbo".to_string(),
+                };
+                config.models.insert(default_name.to_string(), model_config);
+                config.current_model = Some(default_name.to_string());
+                config.save()?;
+
+                println!("提示：已添加默认 OpenAI 配置，请使用以下命令设置 API Key：");
+                println!("  gpt config model add {} <your-api-key>", default_name.green());
             }
+
+            Ok(config)
         } else {
             Ok(Config::default())
         }
@@ -76,7 +103,7 @@ impl Config {
                         .arg(path.clone())
                         .spawn()
                         .is_err() {
-                        // 最后使用系统默认的记事本
+                        // 最使用系统默认的记事本
                         Command::new("notepad")
                             .arg(path)
                             .spawn()?;

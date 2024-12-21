@@ -110,6 +110,23 @@ impl LLMProvider for Provider {
         let running = running.clone();
         let is_qwen = self.is_qwen();
         let is_deepseek = self.is_deepseek();
+
+        if !stream {
+            let response_text = response.text().await?;
+            let response_json: serde_json::Value = serde_json::from_str(&response_text)?;
+            
+            let content = if is_qwen {
+                response_json["output"]["text"].as_str()
+                    .or_else(|| response_json["output"]["choices"][0]["message"]["content"].as_str())
+            } else if is_deepseek {
+                response_json["choices"][0]["message"]["content"].as_str()
+            } else {
+                response_json["choices"][0]["message"]["content"].as_str()
+            }.ok_or_else(|| anyhow::anyhow!("Failed to extract content from response"))?.to_string();
+            
+            let stream = futures::stream::once(async { Ok(content) });
+            return Ok(Box::pin(stream));
+        }
         
         let stream = response
             .bytes_stream()
