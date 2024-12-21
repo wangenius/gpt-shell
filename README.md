@@ -59,38 +59,11 @@ Whether you're a developer seeking coding assistance, a writer looking for creat
 
 ### 🤖 Supported Providers
 
-<table>
-<tr>
-<td>
-  
 - ✅ **OpenAI**
-  - GPT-4
-  - GPT-3.5
 - ✅ **DeepSeek**
-  - Chat Models
-  - Code Models
+- ✅ **Tongyi**
+- ✅ **ZhiPu**
 
-</td>
-<td>
-
-- ✅ **Azure OpenAI**
-  - Custom Deployments
-  - Enterprise Security
-- ✅ **Claude API**
-  - Claude 2
-  - Claude Instant
-
-</td>
-<td>
-
-- ✅ **Local LLMs**
-  - LMStudio
-  - Compatible Servers
-  - Custom Implementations
-
-</td>
-</tr>
-</table>
 
 ## 🚀 Quick Start
 
