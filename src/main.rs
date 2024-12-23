@@ -1,6 +1,10 @@
+/// 主模块
+/// 包含命令行界面、交互式聊天、配置管理等核心功能
+
 mod llm_provider;
 mod config;
 mod bots;
+mod update;
 
 use clap::{Command, Arg};
 use colored::*;
@@ -14,130 +18,15 @@ use bots::BotsConfig;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use ctrlc;
-use reqwest;
-use std::fs;
 use std::time::Duration;
 use tokio::time::sleep;
 use tokio::select;
+use update::Update;
 
-const GITHUB_REPO: &str = "wangenius/gpt-shell";
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-async fn check_update() -> Result<Option<String>> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()?;
-    let releases_url = format!("https://api.github.com/repos/{}/releases/latest", GITHUB_REPO);
-    
-    let mut retries = 3;
-    let mut last_error = None;
-    
-    while retries > 0 {
-        match client.get(&releases_url)
-            .header("User-Agent", "gpt-shell")
-            .send()
-            .await
-        {
-            Ok(response) => {
-                if response.status().is_success() {
-                    match response.json::<serde_json::Value>().await {
-                        Ok(release) => {
-                            if let Some(tag_name) = release["tag_name"].as_str() {
-                                let latest_version = tag_name.trim_start_matches('v');
-                                if latest_version != CURRENT_VERSION {
-                                    return Ok(Some(latest_version.to_string()));
-                                }
-                                return Ok(None);
-                            }
-                            return Err(anyhow::anyhow!("invalid release format"));
-                        }
-                        Err(e) => {
-                            last_error = Some(format!("parse response failed: {}", e));
-                        }
-                    }
-                } else if response.status() == reqwest::StatusCode::NOT_FOUND {
-                    return Ok(None);
-                } else {
-                    last_error = Some(format!("API request failed, status code: {}", response.status()));
-                }
-            }
-            Err(e) => {
-                last_error = Some(format!("network request failed: {}", e));
-            }
-        }
-        
-        retries -= 1;
-        if retries > 0 {
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        }
-    }
-    
-    Err(anyhow::anyhow!("check update failed: {}", last_error.unwrap_or_else(|| "unknown error".to_string())))
-}
-
-async fn download_and_replace(_version: &str) -> Result<()> {
-    let client = reqwest::Client::new();
-    let releases_url = format!("https://api.github.com/repos/{}/releases/latest", GITHUB_REPO);
-    
-    let response = client.get(&releases_url)
-        .header("User-Agent", "gpt-shell")
-        .send()
-        .await?;
-        
-    let release: serde_json::Value = response.json().await?;
-    let assets = release["assets"].as_array()
-        .ok_or_else(|| anyhow::anyhow!("No assets found"))?;
-        
-    // 根据操作系统选择正确的资产
-    let asset_name = if cfg!(target_os = "windows") {
-        "gpt-windows-amd64.exe"
-    } else if cfg!(target_os = "macos") {
-        "gpt-macos-amd64"
-    } else {
-        "gpt-linux-amd64"
-    };
-    
-    let download_url = assets.iter()
-        .find(|asset| asset["name"].as_str() == Some(asset_name))
-        .and_then(|asset| asset["browser_download_url"].as_str())
-        .ok_or_else(|| anyhow::anyhow!("Asset not found"))?;
-        
-    println!("Downloading update...");
-    
-    let response = client.get(download_url)
-        .header("User-Agent", "gpt-shell")
-        .send()
-        .await?;
-        
-    let bytes = response.bytes().await?;
-    
-    // 获取当前可执行文件的路径
-    let current_exe = std::env::current_exe()?;
-    let backup_path = current_exe.with_extension("old");
-    
-    // 备份当前可执行文件
-    if fs::rename(&current_exe, &backup_path).is_err() {
-        println!("Failed to create backup, skipping...");
-    }
-    
-    // 写入新的可执行文件
-    fs::write(&current_exe, bytes)?;
-    
-    // 设置执行权限（在Unix系统上）
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&current_exe)?.permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&current_exe, perms)?;
-    }
-    
-    println!("Update completed successfully!");
-    println!("Please restart gpt-shell to use the new version.");
-    
-    Ok(())
-}
-
+/// 构建命令行界面
+/// 设置所有的命令行参数、子命令和选项
 fn build_cli() -> Command {
     let mut cmd = Command::new("gpt")
         .version(env!("CARGO_PKG_VERSION"))
@@ -279,6 +168,8 @@ fn build_cli() -> Command {
     cmd
 }
 
+/// 显示加载动画
+/// running: 控制动画是否继续运行的原子布尔值
 async fn loading_animation(running: Arc<AtomicBool>) {
     let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
     let mut i = 0;
@@ -292,6 +183,11 @@ async fn loading_animation(running: Arc<AtomicBool>) {
     io::stdout().flush().unwrap();
 }
 
+/// 执行单次对话
+/// config: 程序配置
+/// messages: 对话历史消息
+/// running: 控制对话是否继续的原子布尔值
+/// 返回助手的回复内容
 async fn chat_once(config: &Config, messages: Vec<Message>, running: Arc<AtomicBool>) -> Result<String> {
     let (_, model_config) = match config.get_current_model() {
         Some(model) => model,
@@ -362,6 +258,11 @@ async fn chat_once(config: &Config, messages: Vec<Message>, running: Arc<AtomicB
     Ok(response)
 }
 
+/// 交互式对话模式
+/// config: 程序配置
+/// bot_name: 指定使用的机器人名称
+/// bots_config: 机器人配置
+/// running: 控制程序是否继续运行的原子布尔值
 async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config: BotsConfig, running: Arc<AtomicBool>) -> Result<()> {
     // 首先检查是否配置了模型
     if config.get_current_model().is_none() {
@@ -452,6 +353,12 @@ async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config:
     Ok(())
 }
 
+/// 程序入口点
+/// 处理命令行参数并执行相应的功能:
+/// - 配置管理(模型、系统提示词等)
+/// - 机器人管理
+/// - 版本更新
+/// - 单次对话或交互式对话
 #[tokio::main]
 async fn main() -> Result<()> {
     // load environment variables
@@ -499,7 +406,7 @@ async fn main() -> Result<()> {
         r.store(false, Ordering::SeqCst);
     })?;
 
-    // 检查��否使用了别名
+    // 检查否使用了别名
     let mut bot_name = None;
     for (alias, _) in &aliases {
         let id = format!("alias_{}", alias);
@@ -665,7 +572,7 @@ async fn main() -> Result<()> {
         }
         Some(("update", _)) => {
             println!("checking for updates...");
-            match check_update().await? {
+            match Update::check_update().await? {
                 Some(version) => {
                     println!("new version {} (current: {})", version.green(), CURRENT_VERSION);
                     print!("update to new version? [y/N] ");
@@ -676,7 +583,7 @@ async fn main() -> Result<()> {
                     
                     if input.trim().to_lowercase() == "y" {
                         println!("downloading and installing update...");
-                        if let Err(e) = download_and_replace(&version).await {
+                        if let Err(e) = Update::download_and_replace(&version).await {
                             println!("update failed: {}", e);
                         }
                     } else {
