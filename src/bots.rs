@@ -18,6 +18,8 @@ pub struct BotsConfig {
     pub bots: HashMap<String, Bot>,
     #[serde(default)]
     pub aliases: HashMap<String, String>,
+    #[serde(default)]
+    pub current: Option<String>,
 }
 
 impl BotsConfig {
@@ -140,7 +142,12 @@ impl BotsConfig {
 
         println!("available bots:");
         for (name, bot) in &self.bots {
-            println!("- {} (system prompt: {})", name.green(), bot.system_prompt);
+            let current_marker = if Some(name) == self.current.as_ref() {
+                "* ".bright_green()
+            } else {
+                "  ".into()
+            };
+            println!("{}{} (system prompt: {})", current_marker, name.green(), bot.system_prompt);
         }
     }
 
@@ -183,5 +190,26 @@ impl BotsConfig {
 
     pub fn get_bot_by_alias(&self, alias: &str) -> Option<&String> {
         self.aliases.get(alias)
+    }
+
+    pub fn set_current(&mut self, name: &str) -> Result<()> {
+        if !self.bots.contains_key(name) {
+            return Err(anyhow::anyhow!("机器人不存在: {}", name));
+        }
+        self.current = Some(name.to_string());
+        self.save()?;
+        println!("当前机器人已设置为: {}", name.green());
+        Ok(())
+    }
+
+    pub fn clear_current(&mut self) -> Result<()> {
+        self.current = None;
+        self.save()?;
+        println!("已清除当前机器人设置");
+        Ok(())
+    }
+
+    pub fn get_current(&self) -> Option<&Bot> {
+        self.current.as_ref().and_then(|name| self.bots.get(name))
     }
 } 

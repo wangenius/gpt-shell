@@ -21,28 +21,55 @@ const GITHUB_REPO: &str = "wangenius/gpt-shell";
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 async fn check_update() -> Result<Option<String>> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
     let releases_url = format!("https://api.github.com/repos/{}/releases/latest", GITHUB_REPO);
     
-    let response = client.get(&releases_url)
-        .header("User-Agent", "gpt-shell")
-        .send()
-        .await?;
-        
-    if response.status().is_success() {
-        let release: serde_json::Value = response.json().await?;
-        let latest_version = release["tag_name"].as_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid release format"))?
-            .trim_start_matches('v');
-            
-        if latest_version != CURRENT_VERSION {
-            Ok(Some(latest_version.to_string()))
-        } else {
-            Ok(None)
+    let mut retries = 3;
+    let mut last_error = None;
+    
+    while retries > 0 {
+        match client.get(&releases_url)
+            .header("User-Agent", "gpt-shell")
+            .send()
+            .await
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    match response.json::<serde_json::Value>().await {
+                        Ok(release) => {
+                            if let Some(tag_name) = release["tag_name"].as_str() {
+                                let latest_version = tag_name.trim_start_matches('v');
+                                if latest_version != CURRENT_VERSION {
+                                    return Ok(Some(latest_version.to_string()));
+                                }
+                                return Ok(None);
+                            }
+                            return Err(anyhow::anyhow!("无效的发布格式"));
+                        }
+                        Err(e) => {
+                            last_error = Some(format!("解析响应失败: {}", e));
+                        }
+                    }
+                } else if response.status() == reqwest::StatusCode::NOT_FOUND {
+                    return Ok(None);
+                } else {
+                    last_error = Some(format!("API 请求失败，状态码: {}", response.status()));
+                }
+            }
+            Err(e) => {
+                last_error = Some(format!("网络请求失败: {}", e));
+            }
         }
-    } else {
-        Err(anyhow::anyhow!("Failed to check for updates"))
+        
+        retries -= 1;
+        if retries > 0 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
     }
+    
+    Err(anyhow::anyhow!("检查更新失败: {}", last_error.unwrap_or_else(|| "未知错误".to_string())))
 }
 
 async fn download_and_replace(_version: &str) -> Result<()> {
@@ -217,6 +244,15 @@ fn build_cli() -> Command {
                     .about("edit bots configuration file")
             )
             .subcommand(
+                Command::new("use")
+                    .about("set current bot")
+                    .arg(Arg::new("name").required(true))
+            )
+            .subcommand(
+                Command::new("clear")
+                    .about("clear current bot")
+            )
+            .subcommand(
                 Command::new("alias")
                     .about("alias management")
                     .subcommand(
@@ -304,13 +340,20 @@ async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config:
                 role: "system".to_string(),
                 content: bot.system_prompt.clone(),
             });
-            println!("using bot: {}", bot_name.green());
+            println!("使用机器人: {}", bot_name.green());
         } else {
-            println!("tips: bot not found: {}", bot_name);
-            println!("you can use the following command to list all bots:");
+            println!("提示: 未找到机器人: {}", bot_name);
+            println!("你可以使用以下命令列出所有机器人:");
             println!("  gpt bots list");
             return Ok(());
         }
+    } else if let Some(bot) = bots_config.get_current() {
+        // use current bot if set
+        messages.push(Message {
+            role: "system".to_string(),
+            content: bot.system_prompt.clone(),
+        });
+        println!("使用当前机器人: {}", bot.name.green());
     } else if let Some(ref system_prompt) = config.system_prompt {
         // otherwise use default system prompt
         messages.push(Message {
@@ -319,7 +362,7 @@ async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config:
         });
     }
 
-    println!("enter interactive mode (input 'exit' or press Ctrl+C to exit)");
+    println!("进入交互模式 (输入 'exit' 或按 Ctrl+C 退出)");
     println!("---------------------------------------------");
 
     let stdin = io::stdin();
@@ -539,6 +582,14 @@ async fn main() -> Result<()> {
                 Some(("edit", _)) => {
                     BotsConfig::open_config()?;
                 }
+                Some(("use", use_matches)) => {
+                    if let Some(name) = use_matches.get_one::<String>("name") {
+                        bots_config.set_current(name)?;
+                    }
+                }
+                Some(("clear", _)) => {
+                    bots_config.clear_current()?;
+                }
                 Some(("alias", alias_matches)) => {
                     match alias_matches.subcommand() {
                         Some(("set", set_matches)) => {
@@ -610,8 +661,14 @@ async fn main() -> Result<()> {
                             content: bot.system_prompt.clone(),
                         });
                     } else {
-                        return Err(anyhow::anyhow!("bot not found: {}", bot_name));
+                        return Err(anyhow::anyhow!("未找到机器人: {}", bot_name));
                     }
+                } else if let Some(bot) = bots_config.get_current() {
+                    // 使用当前机器人
+                    messages.push(Message {
+                        role: "system".to_string(),
+                        content: bot.system_prompt.clone(),
+                    });
                 } else if let Some(ref system_prompt) = config.system_prompt {
                     // 否则使用默认系统提示词
                     messages.push(Message {
