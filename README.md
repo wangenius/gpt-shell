@@ -188,6 +188,55 @@ cargo build --release
 - API keys stored securely
 - Session history managed automatically
 
+## 🤖 Agents System
+
+GPT shell offered a powerful agents system, you can create and manage different roles of AI assistants. Each agent can execute specific tasks and commands.
+
+### Agent Configuration
+
+Each agent contains the following configuration:
+  
+```toml
+name = "agent name"
+description = "agent description"
+system_prompt = "system prompt"
+
+# Environment variables configuration
+[env]
+chrome = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+
+# Command templates
+[templates]
+open_browser = "start {{browser}} {{url}}"
+```
+
+### Core Features
+
+- **System Prompt**: Define the role and behavior of the agent
+- **Environment Variables**: Configure system environment variables for command execution
+- **Command Templates**: Predefined command templates for reuse
+- **Smart Command Execution**: Automatically replace variables and execute commands
+- **JSON Format Interaction**: Standardized request-response format
+
+### Usage
+
+```bash
+# Use specific agent
+gpt -a programmer "optimize this code"
+
+# View all available agents
+gpt agents list
+
+# Add new agent
+gpt agents add my-agent -f agent-config.toml
+
+# Remove agent
+gpt agents remove my-agent
+```
+
+## ⚙️ Advanced Configuration
+
+
 ## 🤝 Contributing
 
 We welcome contributions! Here's how you can help:
@@ -215,3 +264,5 @@ GPT Shell is open source software licensed under the [MIT License](LICENSE).
 ## Thanks
 
 - [FREE-CHATGPT-API](https://github.com/popjane/free_chatgpt_api)
+
+
