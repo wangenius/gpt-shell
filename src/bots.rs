@@ -1,11 +1,10 @@
 use std::fs;
 use std::path::PathBuf;
 use std::collections::HashMap;
-use std::process::Command;
 use serde::{Serialize, Deserialize};
 use anyhow::Result;
 use colored::*;
-use std::env;
+use crate::utils;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Bot {
@@ -40,71 +39,21 @@ impl BotsConfig {
     
     pub fn save(&self) -> Result<()> {
         if let Some(path) = Self::get_path() {
-            // ensure directory exists
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            
             let content = toml::to_string_pretty(self)?;
-            fs::write(path, content)?;
+            utils::save_file(&content, &path)?;
         }
         Ok(())
     }
     
     pub fn get_path() -> Option<PathBuf> {
-        let home = env::var("HOME").or_else(|_| env::var("USERPROFILE")).ok()?;
-        let mut path = PathBuf::from(home);
-        path.push(".gpt-shell");
+        let mut path = utils::get_config_dir()?;
         path.push("bots.toml");
         Some(path)
     }
 
     pub fn open_config() -> Result<()> {
         if let Some(path) = Self::get_path() {
-            if cfg!(windows) {
-                // 首先尝试使用 VSCode
-                if Command::new("code")
-                    .arg(path.clone())
-                    .spawn()
-                    .is_err() {
-                    // 如果 VSCode 不可用，尝试使用 Notepad++
-                    if Command::new("notepad++")
-                        .arg(path.clone())
-                        .spawn()
-                        .is_err() {
-                        // 最后使用系统默认的记事本
-                        Command::new("notepad")
-                            .arg(path)
-                            .spawn()?;
-                    }
-                }
-            } else {
-                // 在类Unix系统上，首先尝试使用环境变量中的默认编辑器
-                if let Ok(editor) = env::var("EDITOR") {
-                    Command::new(editor)
-                        .arg(path.clone())
-                        .spawn()?;
-                } else {
-                    // 如果没有设置 EDITOR，尝试常见的编辑器
-                    let editors = ["code", "vim", "nano", "gedit"];
-                    let mut opened = false;
-                    for editor in editors {
-                        if Command::new(editor)
-                            .arg(path.clone())
-                            .spawn()
-                            .is_ok() {
-                            opened = true;
-                            break;
-                        }
-                    }
-                    // 如果都失败了，使用 xdg-open
-                    if !opened {
-                        Command::new("xdg-open")
-                            .arg(path)
-                            .spawn()?;
-                    }
-                }
-            }
+            utils::open_file_in_editor(&path)?;
         }
         Ok(())
     }
@@ -155,7 +104,7 @@ impl BotsConfig {
         if alias.len() != 1 {
             return Err(anyhow::anyhow!("alias must be a single character"));
         }
-        // 检查机器人是否存在
+        // 检查器人是否存在
         if !self.bots.contains_key(&bot) {
             return Err(anyhow::anyhow!("bot not found: {}", bot));
         }

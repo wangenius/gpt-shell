@@ -5,6 +5,7 @@ mod llm_provider;
 mod config;
 mod bots;
 mod update;
+mod utils;
 
 use clap::{Command, Arg};
 use colored::*;

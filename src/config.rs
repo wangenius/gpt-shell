@@ -1,11 +1,10 @@
-use std::fs;
-use std::path::PathBuf;
-use std::process::Command;
-use serde::{Serialize, Deserialize};
 use anyhow::Result;
 use colored::*;
-use std::env;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+use crate::utils;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModelConfig {
@@ -29,7 +28,6 @@ pub struct Config {
 fn default_model() -> Option<String> {
     Some("your are a AI assistant".to_string())
 }
-
 
 fn default_stream() -> bool {
     true
@@ -60,7 +58,10 @@ impl Config {
                 config.save()?;
 
                 println!("提示：已添加默认 OpenAI 配置，请使用以下命令设置 API Key：");
-                println!("  gpt config model add {} <your-api-key>", default_name.green());
+                println!(
+                    "  gpt config model add {} <your-api-key>",
+                    default_name.green()
+                );
             }
 
             Ok(config)
@@ -68,79 +69,35 @@ impl Config {
             Ok(Config::default())
         }
     }
-    
+
     pub fn save(&self) -> Result<()> {
         if let Some(path) = Self::get_path() {
-            // ensure directory exists
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            
             let content = toml::to_string_pretty(self)?;
-            fs::write(path, content)?;
+            utils::save_file(&content, &path)?;
         }
         Ok(())
     }
-    
+
     pub fn get_path() -> Option<PathBuf> {
-        let home = env::var("HOME").or_else(|_| env::var("USERPROFILE")).ok()?;
-        let mut path = PathBuf::from(home);
-        path.push(".gpt-shell");
+        let mut path = utils::get_config_dir()?;
         path.push("config.toml");
         Some(path)
     }
 
     pub fn open_config() -> Result<()> {
         if let Some(path) = Self::get_path() {
-            if cfg!(windows) {
-                // 首先尝试使用 VSCode
-                if Command::new("code")
-                    .arg(path.clone())
-                    .spawn()
-                    .is_err() {
-                    // 如果 VSCode 不可用，尝试使用 Notepad++
-                    if Command::new("notepad++")
-                        .arg(path.clone())
-                        .spawn()
-                        .is_err() {
-                        // 最使用系统默认的记事本
-                        Command::new("notepad")
-                            .arg(path)
-                            .spawn()?;
-                    }
-                }
-            } else {
-                // 在类Unix系统上，首先尝试使用环境变量中的默认编辑器
-                if let Ok(editor) = env::var("EDITOR") {
-                    Command::new(editor)
-                        .arg(path.clone())
-                        .spawn()?;
-                } else {
-                    // 如果没有设置 EDITOR，尝试常见的编辑器
-                    let editors = ["code", "vim", "nano", "gedit"];
-                    let mut opened = false;
-                    for editor in editors {
-                        if Command::new(editor)
-                            .arg(path.clone())
-                            .spawn()
-                            .is_ok() {
-                            opened = true;
-                            break;
-                        }
-                    }
-                    // 如果都失败了，使用 xdg-open
-                    if !opened {
-                        Command::new("xdg-open")
-                            .arg(path)
-                            .spawn()?;
-                    }
-                }
-            }
+            utils::open_file_in_editor(&path)?;
         }
         Ok(())
     }
 
-    pub fn add_model(&mut self, name: String, api_key: String, api_url: String, model: String) -> Result<()> {
+    pub fn add_model(
+        &mut self,
+        name: String,
+        api_key: String,
+        api_url: String,
+        model: String,
+    ) -> Result<()> {
         let model_config = ModelConfig {
             api_key,
             api_url,
@@ -197,18 +154,21 @@ impl Config {
             println!("- {}{}", name.green(), current);
             println!("  API URL: {}", config.api_url);
             println!("  Model: {}", config.model);
-            println!("  API Key: {}", if config.api_key.is_empty() {
-                "not set".red()
-            } else {
-                "set".green()
-            });
+            println!(
+                "  API Key: {}",
+                if config.api_key.is_empty() {
+                    "not set".red()
+                } else {
+                    "set".green()
+                }
+            );
         }
     }
 
     pub fn get_current_model(&self) -> Option<(&str, &ModelConfig)> {
-        self.current_model.as_ref().and_then(|name| {
-            self.models.get(name).map(|config| (name.as_str(), config))
-        })
+        self.current_model
+            .as_ref()
+            .and_then(|name| self.models.get(name).map(|config| (name.as_str(), config)))
     }
 
     pub fn set_system_prompt(&mut self, prompt: Option<String>) -> Result<()> {
@@ -221,11 +181,14 @@ impl Config {
     pub fn set_stream(&mut self, enabled: bool) -> Result<()> {
         self.stream = enabled;
         self.save()?;
-        println!("stream output {}", if enabled {
-            "enabled".green()
-        } else {
-            "disabled".yellow()
-        });
+        println!(
+            "stream output {}",
+            if enabled {
+                "enabled".green()
+            } else {
+                "disabled".yellow()
+            }
+        );
         Ok(())
     }
-} 
+}
