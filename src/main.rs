@@ -400,7 +400,7 @@ async fn main() -> Result<()> {
         }
     }
     
-    // 将别名参数添加���命令中
+    // 将别名参数添加到命令中
     for arg in alias_args {
         cmd = cmd.arg(arg);
     }
@@ -572,17 +572,27 @@ async fn main() -> Result<()> {
             }
         }
         Some(("update", _)) => {
-            println!("Checking for updates...");
+            println!("checking for updates...");
             match check_update().await? {
                 Some(version) => {
-                    println!("New version {} available! (current: {})", version.green(), CURRENT_VERSION);
-                    println!("Downloading and installing update...");
-                    if let Err(e) = download_and_replace(&version).await {
-                        println!("Failed to update: {}", e);
+                    println!("new version {} (current: {})", version.green(), CURRENT_VERSION);
+                    print!("update to new version? [y/N] ");
+                    io::stdout().flush()?;
+                    
+                    let mut input = String::new();
+                    io::stdin().read_line(&mut input)?;
+                    
+                    if input.trim().to_lowercase() == "y" {
+                        println!("downloading and installing update...");
+                        if let Err(e) = download_and_replace(&version).await {
+                            println!("update failed: {}", e);
+                        }
+                    } else {
+                        println!("update cancelled");
                     }
                 }
                 None => {
-                    println!("You are already using the latest version ({})", CURRENT_VERSION.green());
+                    println!("you are already using the latest version ({})", CURRENT_VERSION.green());
                 }
             }
         }
