@@ -1,19 +1,36 @@
+use anyhow::Result;
+use futures::{Stream, StreamExt};
+use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use serde::{Serialize, Deserialize};
-use futures::{Stream, StreamExt};
-use std::pin::Pin;
-use anyhow::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub role: String,
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function_call: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionDef {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
 }
 
 #[async_trait::async_trait]
 pub trait LLMProvider: Send + Sync {
-    async fn chat(&self, messages: Vec<Message>, stream: bool, running: Arc<AtomicBool>) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
+    async fn chat(
+        &self,
+        messages: Vec<Message>,
+        stream: bool,
+        running: Arc<AtomicBool>,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
 }
 
 pub struct Provider {
@@ -21,19 +38,49 @@ pub struct Provider {
     api_key: String,
     api_url: String,
     model: String,
+    json_mode: bool,
+    functions: Option<Vec<FunctionDef>>,
+}
+
+impl fmt::Debug for Provider {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Provider")
+            .field("api_url", &self.api_url)
+            .field("model", &self.model)
+            .field("json_mode", &self.json_mode)
+            .field("functions", &self.functions)
+            // 不输出敏感信息
+            .field("api_key", &"[REDACTED]")
+            .finish()
+    }
+}
+
+impl Clone for Provider {
+    fn clone(&self) -> Self {
+        Self {
+            client: self.client.clone(),
+            api_key: self.api_key.clone(),
+            api_url: self.api_url.clone(),
+            model: self.model.clone(),
+            json_mode: self.json_mode,
+            functions: self.functions.clone(),
+        }
+    }
 }
 
 impl Provider {
     pub fn new(api_key: String) -> Self {
         Self {
-            client: reqwest::Client::builder().danger_accept_invalid_certs(true)
-            .no_proxy()
-            .build().unwrap_or_else(|_| {
-                reqwest::Client::new()
-            }),
+            client: reqwest::Client::builder()
+                .danger_accept_invalid_certs(true)
+                .no_proxy()
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
             api_key,
             api_url: "https://api.openai.com/v1/chat/completions".to_string(),
             model: "gpt-3.5-turbo".to_string(),
+            json_mode: false,
+            functions: None,
         }
     }
 
@@ -47,61 +94,82 @@ impl Provider {
         self
     }
 
+    pub fn with_json_mode(mut self, enabled: bool) -> Self {
+        self.json_mode = enabled;
+        self
+    }
+
     fn is_v36(&self) -> bool {
         self.api_url.contains("free.v36.cm")
     }
 
-    fn is_qwen(&self) -> bool {
+    pub fn is_qwen(&self) -> bool {
         self.api_url.contains("dashscope.aliyuncs.com")
     }
 
-    fn is_deepseek(&self) -> bool {
-        self.api_url.contains("api.deepseek.com")
-    }
+
 
     fn get_api_url(&self) -> String {
-            self.api_url.clone()
+        self.api_url.clone()
     }
 }
 
 #[async_trait::async_trait]
 impl LLMProvider for Provider {
-    async fn chat(&self, messages: Vec<Message>, stream: bool, running: Arc<AtomicBool>) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        let request_body = if self.is_qwen() {
-            serde_json::json!({
-                "model": self.model,
-                "input": {
-                    "messages": messages
-                },
-                "parameters": {
-                    "stream": stream,
-                    "incremental_output": true
-                }
-            })
-        } else {
-            serde_json::json!({
+    async fn chat(
+        &self,
+        messages: Vec<Message>,
+        stream: bool,
+        running: Arc<AtomicBool>,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+        let request_body = {
+            let mut body = serde_json::json!({
                 "model": self.model,
                 "messages": messages,
                 "stream": stream
-            })
+            });
+
+            if self.json_mode {
+                body.as_object_mut().unwrap().insert(
+                    "response_format".to_string(),
+                    serde_json::json!({"type": "json_object"}),
+                );
+            }
+
+            if let Some(functions) = &self.functions {
+                body.as_object_mut()
+                    .unwrap()
+                    .insert("functions".to_string(), serde_json::json!(functions));
+            }
+            body
         };
 
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert("Content-Type", "application/json".parse().unwrap());
-        
+
         if self.is_qwen() {
-            headers.insert("Authorization", format!("Bearer {}", self.api_key).parse().unwrap());
+            headers.insert(
+                "Authorization",
+                format!("Bearer {}", self.api_key).parse().unwrap(),
+            );
             headers.insert("X-DashScope-SSE", "enable".parse().unwrap());
         } else if self.is_v36() {
-            headers.insert("Authorization", format!("Bearer {}", self.api_key).parse().unwrap());
+            headers.insert(
+                "Authorization",
+                format!("Bearer {}", self.api_key).parse().unwrap(),
+            );
             headers.insert("x-foo", "true".parse().unwrap());
         } else {
-            headers.insert("Authorization", format!("Bearer {}", self.api_key).parse().unwrap());
+            headers.insert(
+                "Authorization",
+                format!("Bearer {}", self.api_key).parse().unwrap(),
+            );
         }
 
         let api_url = self.get_api_url();
-    
-        let response = self.client
+
+        let response = self
+            .client
             .post(&api_url)
             .headers(headers)
             .json(&request_body)
@@ -119,26 +187,18 @@ impl LLMProvider for Provider {
         }
 
         let running = running.clone();
-        let is_qwen = self.is_qwen();
-        let is_deepseek = self.is_deepseek();
-
         if !stream {
             let response_text = response.text().await?;
             let response_json: serde_json::Value = serde_json::from_str(&response_text)?;
-            
-            let content = if is_qwen {
-                response_json["output"]["text"].as_str()
-                    .or_else(|| response_json["output"]["choices"][0]["message"]["content"].as_str())
-            } else if is_deepseek {
-                response_json["choices"][0]["message"]["content"].as_str()
-            } else {
-                response_json["choices"][0]["message"]["content"].as_str()
-            }.ok_or_else(|| anyhow::anyhow!("Failed to extract content from response"))?.to_string();
-            
+
+            let content =  response_json["choices"][0]["message"]["content"].as_str()
+            .ok_or_else(|| anyhow::anyhow!("Failed to extract content from response"))?
+            .to_string();
+
             let stream = futures::stream::once(async { Ok(content) });
             return Ok(Box::pin(stream));
         }
-        
+
         let stream = response
             .bytes_stream()
             .take_while(move |_| {
@@ -148,7 +208,7 @@ impl LLMProvider for Provider {
             .map(move |chunk| -> Result<String> {
                 let chunk = chunk.map_err(anyhow::Error::from)?;
                 let text = String::from_utf8_lossy(&chunk);
-                
+
                 let mut result = String::new();
                 for line in text.lines() {
                     if line.starts_with("data: ") {
@@ -156,27 +216,20 @@ impl LLMProvider for Provider {
                         if json_str.trim() == "[DONE]" {
                             continue;
                         }
-                        if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(json_str) {
+                        if let Ok(response_json) =
+                            serde_json::from_str::<serde_json::Value>(json_str)
+                        {
                             if let Some(error_msg) = response_json["error_msg"].as_str() {
                                 return Err(anyhow::anyhow!("API Error: {}", error_msg));
                             }
-                            
-                            if is_qwen {
-                                if let Some(content) = response_json["output"]["choices"][0]["message"]["content"].as_str() {
-                                    result.push_str(content);
-                                } else if let Some(content) = response_json["output"]["text"].as_str() {
-                                    result.push_str(content);
-                                }
-                            } else if is_deepseek {
-                                if let Some(content) = response_json["choices"][0]["delta"]["content"].as_str() {
-                                    result.push_str(content);
-                                } else if let Some(content) = response_json["choices"][0]["message"]["content"].as_str() {
-                                    result.push_str(content);
-                                }
-                            } else {
-                                if let Some(content) = response_json["choices"][0]["delta"]["content"].as_str() {
-                                    result.push_str(content);
-                                }
+                            if let Some(content) =
+                                response_json["choices"][0]["delta"]["content"].as_str()
+                            {
+                                result.push_str(content);
+                            } else if let Some(content) =
+                                response_json["choices"][0]["message"]["content"].as_str()
+                            {
+                                result.push_str(content);
                             }
                         }
                     }

@@ -6,6 +6,7 @@ mod config;
 mod bots;
 mod update;
 mod utils;
+mod agents;
 
 use clap::{Command, Arg};
 use colored::*;
@@ -23,8 +24,21 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tokio::select;
 use update::Update;
+use std::collections::HashMap;
+use std::fs;
+use agents::{Agent, AgentManager};
 
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// 添加辅助函数
+fn create_message(role: &str, content: String) -> Message {
+    Message {
+        role: role.to_string(),
+        content,
+        name: None,
+        function_call: None,
+    }
+}
 
 /// 构建命令行界面
 /// 设置所有的命令行参数、子命令和选项
@@ -38,6 +52,13 @@ fn build_cli() -> Command {
                 .long("bot")
                 .help("use specified bot")
                 .value_name("BOT")
+        )
+        .arg(
+            Arg::new("agent")
+                .short('a')
+                .long("agent")
+                .help("use specified agent")
+                .value_name("AGENT")
         )
         .arg(
             Arg::new("prompt")
@@ -166,6 +187,43 @@ fn build_cli() -> Command {
             )
     );
 
+    cmd = cmd.subcommand(
+        Command::new("agents")
+            .about("agent management")
+            .subcommand(
+                Command::new("add")
+                    .about("add new agent")
+                    .arg(Arg::new("name").required(true))
+                    .arg(
+                        Arg::new("system")
+                            .short('s')
+                            .long("system")
+                            .help("system prompt")
+                            .required(true)
+                    )
+            )
+            .subcommand(
+                Command::new("remove")
+                    .about("remove agent")
+                    .arg(Arg::new("name").required(true))
+            )
+            .subcommand(
+                Command::new("list")
+                    .about("list all agents")
+            )
+            .subcommand(
+                Command::new("edit")
+                    .about("edit agent configuration")
+                    .arg(Arg::new("name").required(true))
+            )
+            .subcommand(
+                Command::new("run")
+                    .about("run agent with prompt")
+                    .arg(Arg::new("name").required(true))
+                    .arg(Arg::new("prompt").required(true))
+            )
+    );
+
     cmd
 }
 
@@ -186,7 +244,7 @@ async fn loading_animation(running: Arc<AtomicBool>) {
 
 /// 执行单次对话
 /// config: 程序配置
-/// messages: 对话历史消息
+/// messages: 对话历消息
 /// running: 控制对话是否继续的原子布尔值
 /// 返回助手的回复内容
 async fn chat_once(config: &Config, messages: Vec<Message>, running: Arc<AtomicBool>) -> Result<String> {
@@ -279,10 +337,7 @@ async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config:
     // if specified bot, use bot's system prompt
     if let Some(bot_name) = bot_name {
         if let Some(bot) = bots_config.get_bot(&bot_name) {
-            messages.push(Message {
-                role: "system".to_string(),
-                content: bot.system_prompt.clone(),
-            });
+            messages.push(create_message("system", bot.system_prompt.clone()));
             println!("using bot: {}", bot_name.green());
         } else {
             println!("tips: bot not found: {}", bot_name);
@@ -292,17 +347,11 @@ async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config:
         }
     } else if let Some(bot) = bots_config.get_current() {
         // use current bot if set
-        messages.push(Message {
-            role: "system".to_string(),
-            content: bot.system_prompt.clone(),
-        });
+        messages.push(create_message("system", bot.system_prompt.clone()));
         println!("using current bot: {}", bot.name.green());
     } else if let Some(ref system_prompt) = config.system_prompt {
         // otherwise use default system prompt
-        messages.push(Message {
-            role: "system".to_string(),
-            content: system_prompt.clone(),
-        });
+        messages.push(create_message("system", system_prompt.clone()));
     }
 
     println!("enter interactive mode (input 'exit' or press Ctrl+C to exit)");
@@ -333,20 +382,14 @@ async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config:
         }
 
         // add user message
-        messages.push(Message {
-            role: "user".to_string(),
-            content: input.to_string(),
-        });
+        messages.push(create_message("user", input.to_string()));
 
         // get assistant response
         let response = chat_once(&config, messages.clone(), running.clone()).await?;
 
         // only add to history if there is a response
         if !response.is_empty() {
-            messages.push(Message {
-                role: "assistant".to_string(),
-                content: response,
-            });
+            messages.push(create_message("assistant", response));
         }
     }
 
@@ -494,7 +537,7 @@ async fn main() -> Result<()> {
                     Config::open_config()?;
                 }
                 _ => {
-                    // 默认显示当前配置
+                    // 默认显示当前置
                     println!("current config:");
                     if let Some((name, model_config)) = config.get_current_model() {
                         println!("  current model: {}", name.green());
@@ -571,6 +614,78 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        Some(("agents", sub_matches)) => {
+            match sub_matches.subcommand() {
+                Some(("add", add_matches)) => {
+                    if let (Some(name), Some(system)) = (
+                        add_matches.get_one::<String>("name"),
+                        add_matches.get_one::<String>("system")
+                    ) {
+                        let agent = Agent {
+                            name: name.clone(),
+                            description: None,
+                            system_prompt: system.clone(),
+                            env: HashMap::new(),
+                            templates: HashMap::new(),
+                        };
+
+                        // 保存 agent 配置
+                        let manager = AgentManager::load()?;
+                        manager.save_agent(name, &agent)?;
+                        println!("已添加 agent: {}", name.green());
+                        println!("提示: 你可以使用以下命令编辑完整配置：");
+                        println!("  gpt agents edit {}", name);
+                    }
+                }
+                Some(("remove", remove_matches)) => {
+                    if let Some(name) = remove_matches.get_one::<String>("name") {
+                        let mut manager = AgentManager::load()?;
+                        if manager.remove_agent(name).is_some() {
+                            // 删除配置文件
+                            let mut path = AgentManager::get_agents_dir()?;
+                            path.push(format!("{}.toml", name));
+                            if path.exists() {
+                                fs::remove_file(path)?;
+                            }
+                            println!("已删除 agent: {}", name.green());
+                        } else {
+                            println!("未找到 agent: {}", name.red());
+                        }
+                    }
+                }
+                Some(("list", _)) => {
+                    let manager = AgentManager::load()?;
+                    manager.list_agents_info();
+                }
+                Some(("edit", edit_matches)) => {
+                    if let Some(name) = edit_matches.get_one::<String>("name") {
+                        AgentManager::open_agent_config(name)?;
+                    }
+                }
+                Some(("run", run_matches)) => {
+                    if let (Some(name), Some(prompt)) = (
+                        run_matches.get_one::<String>("name"),
+                        run_matches.get_one::<String>("prompt")
+                    ) {
+                        let manager = AgentManager::load()?;
+                        if let Some(agent) = manager.get_agent(name) {
+                            println!("使用 agent: {}", name.green());
+                            agent.run(&config, prompt, running.clone()).await?;
+                        } else {
+                            println!("未找到 agent: {}", name.red());
+                        }
+                    }
+                }
+                _ => {
+                    println!("可用的 agent 命令：");
+                    println!("  gpt agents add <name> --system <prompt>  添加新的 agent");
+                    println!("  gpt agents remove <name>                 删除 agent");
+                    println!("  gpt agents list                         列出所有 agent");
+                    println!("  gpt agents edit <name>                  编辑 agent 配置");
+                    println!("  gpt agents run <name> <prompt>          运行 agent");
+                }
+            }
+        }
         Some(("update", _)) => {
             println!("checking for updates...");
             match Update::check_update().await? {
@@ -599,41 +714,40 @@ async fn main() -> Result<()> {
         _ => {
             // 获取提示词
             if let Some(prompt) = matches.get_one::<String>("prompt") {
-                // 单次对话模式
-                let mut messages = Vec::new();
-
-                // 如果指定了机器人，使用机器人的系统提示词
-                if let Some(bot_name) = &bot_name {
-                    if let Some(bot) = bots_config.get_bot(bot_name) {
-                        messages.push(Message {
-                            role: "system".to_string(),
-                            content: bot.system_prompt.clone(),
-                        });
+                // 如果指定了 agent，使用 agent 的 run 方法
+                if let Some(agent_name) = matches.get_one::<String>("agent") {
+                    let manager = AgentManager::load()?;
+                    if let Some(agent) = manager.get_agent(agent_name) {
+                        println!("使用 agent: {}", agent_name.green());
+                        agent.run(&config, prompt, running).await?;
                     } else {
-                        return Err(anyhow::anyhow!("未找到机器人: {}", bot_name));
+                        return Err(anyhow::anyhow!("未找到 agent: {}", agent_name));
                     }
-                } else if let Some(bot) = bots_config.get_current() {
-                    // 使用当前机器人
-                    messages.push(Message {
-                        role: "system".to_string(),
-                        content: bot.system_prompt.clone(),
-                    });
-                } else if let Some(ref system_prompt) = config.system_prompt {
-                    // 否则使用默认系统提示词
-                    messages.push(Message {
-                        role: "system".to_string(),
-                        content: system_prompt.clone(),
-                    });
+                } else {
+                    // 单次对话模式
+                    let mut messages = Vec::new();
+
+                    if let Some(bot_name) = &bot_name {
+                        // 如果指定了机器人，使用机器人的系统提示词
+                        if let Some(bot) = bots_config.get_bot(bot_name) {
+                            messages.push(create_message("system", bot.system_prompt.clone()));
+                        } else {
+                            return Err(anyhow::anyhow!("未找到机器人: {}", bot_name));
+                        }
+                    } else if let Some(bot) = bots_config.get_current() {
+                        // 使用当前机器人
+                        messages.push(create_message("system", bot.system_prompt.clone()));
+                    } else if let Some(ref system_prompt) = config.system_prompt {
+                        // 否则用默认系统提示词
+                        messages.push(create_message("system", system_prompt.clone()));
+                    }
+
+                    // 添加用户消息
+                    messages.push(create_message("user", prompt.clone()));
+
+                    // 发送消息并获取回复
+                    chat_once(&config, messages, running).await?;
                 }
-
-                // 添加用户消息
-                messages.push(Message {
-                    role: "user".to_string(),
-                    content: prompt.clone(),
-                });
-
-                // 发送消息并获取回复
-                chat_once(&config, messages, running).await?;
             } else {
                 // 交互模式
                 interactive_mode(config, bot_name, bots_config, running).await?;
