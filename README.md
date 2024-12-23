@@ -8,7 +8,7 @@
   <p><strong>Your Professional Terminal Companion for LLM Interactions</strong></p>
 
   [![GitHub stars](https://img.shields.io/github/stars/wangenius/gpt-shell)](https://github.com/wangenius/gpt-shell/stargazers)
-  [![License](https://img.shields.io/github/license/wangenius/gpt-shell)](https://github.com/wangenius/gpt-shell/blob/main/LICENSE)
+  [![License](https://img.shields.io/github/license/wangenius/gpt-shell)](https://github.com/wangenius/gpt-shell/blob/master/LICENSE)
   ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20macos%20%7C%20linux-blue)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/wangenius/gpt-shell/pulls)
 
