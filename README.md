@@ -212,6 +212,6 @@ GPT Shell is open source software licensed under the [MIT License](LICENSE).
 </div>
 
 
-## 感谢项目
+## Thanks
 
 - [FREE-CHATGPT-API](https://github.com/popjane/free_chatgpt_api)
