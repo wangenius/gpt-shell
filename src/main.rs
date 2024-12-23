@@ -16,6 +16,9 @@ use std::sync::Arc;
 use ctrlc;
 use reqwest;
 use std::fs;
+use std::time::Duration;
+use tokio::time::sleep;
+use tokio::select;
 
 const GITHUB_REPO: &str = "wangenius/gpt-shell";
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -46,20 +49,20 @@ async fn check_update() -> Result<Option<String>> {
                                 }
                                 return Ok(None);
                             }
-                            return Err(anyhow::anyhow!("无效的发布格式"));
+                            return Err(anyhow::anyhow!("invalid release format"));
                         }
                         Err(e) => {
-                            last_error = Some(format!("解析响应失败: {}", e));
+                            last_error = Some(format!("parse response failed: {}", e));
                         }
                     }
                 } else if response.status() == reqwest::StatusCode::NOT_FOUND {
                     return Ok(None);
                 } else {
-                    last_error = Some(format!("API 请求失败，状态码: {}", response.status()));
+                    last_error = Some(format!("API request failed, status code: {}", response.status()));
                 }
             }
             Err(e) => {
-                last_error = Some(format!("网络请求失败: {}", e));
+                last_error = Some(format!("network request failed: {}", e));
             }
         }
         
@@ -69,7 +72,7 @@ async fn check_update() -> Result<Option<String>> {
         }
     }
     
-    Err(anyhow::anyhow!("检查更新失败: {}", last_error.unwrap_or_else(|| "未知错误".to_string())))
+    Err(anyhow::anyhow!("check update failed: {}", last_error.unwrap_or_else(|| "unknown error".to_string())))
 }
 
 async fn download_and_replace(_version: &str) -> Result<()> {
@@ -276,6 +279,19 @@ fn build_cli() -> Command {
     cmd
 }
 
+async fn loading_animation(running: Arc<AtomicBool>) {
+    let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    let mut i = 0;
+    while running.load(Ordering::SeqCst) {
+        print!("\r{} thinking...", frames[i].cyan());
+        io::stdout().flush().unwrap();
+        i = (i + 1) % frames.len();
+        sleep(Duration::from_millis(80)).await;
+    }
+    print!("\r                                          \r"); // 清除加载动画
+    io::stdout().flush().unwrap();
+}
+
 async fn chat_once(config: &Config, messages: Vec<Message>, running: Arc<AtomicBool>) -> Result<String> {
     let (_, model_config) = match config.get_current_model() {
         Some(model) => model,
@@ -293,10 +309,36 @@ async fn chat_once(config: &Config, messages: Vec<Message>, running: Arc<AtomicB
         .with_url(model_config.api_url.clone())
         .with_model(model_config.model.clone());
 
-    let mut stream = provider.chat(messages, config.stream, running.clone()).await?;
+    let loading_running = Arc::new(AtomicBool::new(true));
+    let loading_handle = tokio::spawn(loading_animation(loading_running.clone()));
+
+    let stream_result = select! {
+        result = provider.chat(messages, config.stream, running.clone()) => {
+            loading_running.store(false, Ordering::SeqCst);
+            let _ = loading_handle.await;
+            result
+        }
+        _ = async {
+            while running.load(Ordering::SeqCst) {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        } => {
+            loading_running.store(false, Ordering::SeqCst);
+            let _ = loading_handle.await;
+            println!("\n{}", "cancelled".red());
+            return Ok(String::new());
+        }
+    };
+
+    let mut stream = stream_result?;
     let mut response = String::new();
 
     while let Some(result) = stream.next().await {
+        if !running.load(Ordering::SeqCst) {
+            println!("\n{}", "cancelled".red());
+            return Ok(response);
+        }
+
         match result {
             Ok(content) if !content.is_empty() => {
                 print!("{}", content.green());
@@ -311,9 +353,8 @@ async fn chat_once(config: &Config, messages: Vec<Message>, running: Arc<AtomicB
         }
     }
 
-    // if cancelled by interrupt, print prompt
     if !running.load(Ordering::SeqCst) {
-        println!("\ncancelled");
+        println!("\n{}", "cancelled".red());
     } else {
         println!();
     }
@@ -340,10 +381,10 @@ async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config:
                 role: "system".to_string(),
                 content: bot.system_prompt.clone(),
             });
-            println!("使用机器人: {}", bot_name.green());
+            println!("using bot: {}", bot_name.green());
         } else {
-            println!("提示: 未找到机器人: {}", bot_name);
-            println!("你可以使用以下命令列出所有机器人:");
+            println!("tips: bot not found: {}", bot_name);
+            println!("you can use the following command to list all bots:");
             println!("  gpt bots list");
             return Ok(());
         }
@@ -353,7 +394,7 @@ async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config:
             role: "system".to_string(),
             content: bot.system_prompt.clone(),
         });
-        println!("使用当前机器人: {}", bot.name.green());
+        println!("using current bot: {}", bot.name.green());
     } else if let Some(ref system_prompt) = config.system_prompt {
         // otherwise use default system prompt
         messages.push(Message {
@@ -362,7 +403,7 @@ async fn interactive_mode(config: Config, bot_name: Option<String>, bots_config:
         });
     }
 
-    println!("进入交互模式 (输入 'exit' 或按 Ctrl+C 退出)");
+    println!("enter interactive mode (input 'exit' or press Ctrl+C to exit)");
     println!("---------------------------------------------");
 
     let stdin = io::stdin();
@@ -458,7 +499,7 @@ async fn main() -> Result<()> {
         r.store(false, Ordering::SeqCst);
     })?;
 
-    // 检查是否使用了别名
+    // 检查��否使用了别名
     let mut bot_name = None;
     for (alias, _) in &aliases {
         let id = format!("alias_{}", alias);
