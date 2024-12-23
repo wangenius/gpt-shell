@@ -26,7 +26,11 @@ pub struct Provider {
 impl Provider {
     pub fn new(api_key: String) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder().danger_accept_invalid_certs(true)
+            .no_proxy()
+            .build().unwrap_or_else(|_| {
+                reqwest::Client::new()
+            }),
             api_key,
             api_url: "https://api.openai.com/v1/chat/completions".to_string(),
             model: "gpt-3.5-turbo".to_string(),
@@ -43,12 +47,20 @@ impl Provider {
         self
     }
 
+    fn is_v36(&self) -> bool {
+        self.api_url.contains("free.v36.cm")
+    }
+
     fn is_qwen(&self) -> bool {
         self.api_url.contains("dashscope.aliyuncs.com")
     }
 
     fn is_deepseek(&self) -> bool {
         self.api_url.contains("api.deepseek.com")
+    }
+
+    fn get_api_url(&self) -> String {
+            self.api_url.clone()
     }
 }
 
@@ -80,16 +92,15 @@ impl LLMProvider for Provider {
         if self.is_qwen() {
             headers.insert("Authorization", format!("Bearer {}", self.api_key).parse().unwrap());
             headers.insert("X-DashScope-SSE", "enable".parse().unwrap());
+        } else if self.is_v36() {
+            headers.insert("Authorization", format!("Bearer {}", self.api_key).parse().unwrap());
+            headers.insert("x-foo", "true".parse().unwrap());
         } else {
             headers.insert("Authorization", format!("Bearer {}", self.api_key).parse().unwrap());
         }
 
-        let api_url = if self.is_qwen() {
-            format!("{}/chat/completions", self.api_url.trim_end_matches('/').trim_end_matches("/v1"))
-        } else {
-            self.api_url.clone()
-        };
-
+        let api_url = self.get_api_url();
+    
         let response = self.client
             .post(&api_url)
             .headers(headers)

@@ -136,6 +136,8 @@ gpt config model use deepseek
 gpt config model remove openai
 ```
 
+`--url` is full url, like `https://api.deepseek.com/v1/chat/completions` or `https://api.openai.com/v1/chat/completions`, not the base url like `https://api.openai.com/v1`.
+
 ### Role Management
 ```bash
 # View all roles
@@ -208,3 +210,8 @@ GPT Shell is open source software licensed under the [MIT License](LICENSE).
 **[Request Feature](https://github.com/wangenius/gpt-shell/issues)**
 
 </div>
+
+
+## 感谢项目
+
+- [FREE-CHATGPT-API](https://github.com/popjane/free_chatgpt_api)
