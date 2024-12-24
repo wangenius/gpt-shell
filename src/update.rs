@@ -71,13 +71,9 @@ impl Update {
     /// version: 要更新到的版本号
     pub async fn download_and_replace(_version: &str) -> Result<()> {
         let client = reqwest::Client::new();
-        let releases_url = format!(
-            "https://api.github.com/repos/{}/releases/latest",
-            RELEASES_URL
-        );
 
         let response = client
-            .get(&releases_url)
+            .get(RELEASES_URL)
             .header("User-Agent", "gpt-shell")
             .send()
             .await?;
@@ -112,7 +108,7 @@ impl Update {
 
         let bytes = response.bytes().await?;
 
-        // 获取当前��执行文件的路径
+        // 获取当前可执行文件的路径
         let current_exe = std::env::current_exe()?;
         let backup_path = current_exe.with_extension("old");
 
