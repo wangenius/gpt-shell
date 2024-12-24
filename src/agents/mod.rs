@@ -27,7 +27,7 @@ struct ConversationContext {
     provider: Provider,
     running: Arc<AtomicBool>,
 }
-
+/* 对话上下文管理 */
 impl ConversationContext {
     fn new(provider: Provider, running: Arc<AtomicBool>) -> Self {
         Self {
@@ -48,6 +48,7 @@ impl ConversationContext {
 }
 
 impl Agent {
+    /* 构建系统提示词 */
     fn build_system_prompt(&self) -> String {
         let mut prompt = String::new();
         
@@ -64,28 +65,35 @@ impl Agent {
         prompt.push_str("2. 选择合适的命令来完成任务\n");
         prompt.push_str("3. 如果需要使用多个命令，将它们组合在一起\n");
         prompt.push_str("4. 确保命令的语法正确\n\n");
+
+        if cfg!(target_os = "windows") {
+            prompt.push_str("你现在处于windows系统，请使用windows命令（powershell）\n");
+        } else if cfg!(target_os = "macos") {
+            prompt.push_str("你现在处于macos系统，请使用macos命令（zsh）\n");
+        } else if cfg!(target_os = "linux") {
+            prompt.push_str("你现在处于linux系统，请使用linux命令（bash）\n");
+        }
         
         // 添加环境变量信息
         if !self.env.is_empty() {
-            prompt.push_str("系统已配置以下环境变量，你可以在命令中使用它们：\n");
+            prompt.push_str("系统已配置以下环境变量，必要的时候你可以在命令中使用它们：\n");
             for key in self.env.keys() {
                 prompt.push_str(&format!("- {}\n", key));
             }
-            prompt.push_str("\n使用变量时，请用{{变量名}}的格式，例如: {{chrome}}\n");
+            prompt.push_str("\n使用变量时，请用{{变量名}}的格式，例如: {{variable}}\n");
             prompt.push_str("你可以选择使用或不使用这些变量，具体取决于任务需求\n\n");
         }
         
         // 添加命令模板参考
         if !self.templates.is_empty() {
-            prompt.push_str("可用的命令模板：\n");
+            prompt.push_str("需要的时候，你可以使用以下命令模板：\n");
             for (name, template) in &self.templates {
                 prompt.push_str(&format!("- {}: `{}`\n", name, template));
             }
-            prompt.push_str("需要时你可以基于这些模板创建新的命令\n\n");
+            prompt.push_str("你可以选择使用或者不使用这些模板，具体取决于任务需求\n\n");
         }
 
         prompt.push_str(r#"请严格按照以下 JSON 格式回复：
-
 {
     "thought": "详细分析用户需求和你的解决方案",
     "command": "具体要执行的命令"
@@ -103,19 +111,6 @@ impl Agent {
 2. command 必须是可以直接执行的完整命令
 3. 如果用户的请求不清晰，使用 response 请求更多信息
 4. 始终确保命令的安全性和正确性
-
-示例：
-用户: "打开Chrome浏览器访问百度"
-{
-    "thought": "用户想要使用Chrome浏览器访问百度。我们可以使用配置的chrome变量来启动浏览器，并指定网址。",
-    "command": "start {{chrome}} https://www.baidu.com"
-}
-示例二
-用户: "打开记事本"
-{
-    "thought": "用户想要打开记事本",
-    "response": "start notepad"
-}
 "#);
 
         prompt

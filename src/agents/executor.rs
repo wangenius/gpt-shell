@@ -30,12 +30,11 @@ impl CommandExecutor {
             return Err(anyhow::anyhow!("命令中存在未替换的变量: {}", command_str));
         }
 
-        println!("\n最终命令: {}", command_str.cyan());
-
         // 执行命令
         let output = if cfg!(target_os = "windows") {
-            Command::new("cmd")
-                .args(["/C", &command_str])
+            println!("执行命令: {}", command_str.cyan());
+            Command::new("powershell")
+                .args(["-Command", &command_str])
                 .output()?
         } else {
             Command::new("sh")

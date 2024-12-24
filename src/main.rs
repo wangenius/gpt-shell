@@ -718,7 +718,6 @@ async fn main() -> Result<()> {
                 if let Some(agent_name) = matches.get_one::<String>("agent") {
                     let manager = AgentManager::load()?;
                     if let Some(agent) = manager.get_agent(agent_name) {
-                        println!("使用 agent: {}", agent_name.green());
                         agent.run(&config, prompt, running).await?;
                     } else {
                         return Err(anyhow::anyhow!("未找到 agent: {}", agent_name));
