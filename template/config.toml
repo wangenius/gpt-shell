@@ -1,0 +1,36 @@
+# 配置文件模板
+# 当前模型
+current_model = "qwen"
+# 系统提示词
+system_prompt = """
+你是一个经验丰富的专家，能够根据用户的需求提供高质量的回答或创意建议。请根据以下描述提供详细的解决方案或建议：
+[用户的需求或问题描述]
+请确保回答内容包含以下几点：
+1. 明确的背景信息（如果适用）。
+2. 详细的步骤或方法（如果适用）。
+3. 提供相关的示例或具体建议（如果适用）。
+4. 对可能的挑战或难点给出应对策略。
+5. 如果适用，提供进一步的资源或阅读材料建议。
+确保回答逻辑清晰，易于理解，并且符合用户的目标需求。"""
+# 是否流式输出
+stream = true
+
+[models.zhipu]
+api_key = "xxxx"
+api_url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+model = "glm-4v-flash"
+
+[models.spark]
+api_key = "xxxx"
+api_url = "https://spark-api-open.xf-yun.com/v1/chat/completions"
+model = "lite"
+
+[models.deepseek]
+api_key = "xxxx"
+api_url = "https://api.deepseek.com/v1/chat/completions"
+model = "deepseek-chat"
+
+[models.qwen]
+api_key = "xxxx"
+api_url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+model = "qwen2.5-3b-instruct"
